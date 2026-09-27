@@ -26,18 +26,22 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'patch') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'files') | Out-Null
 
 $meta.patch = 'patch/module.patch'
-$meta.patches = [ordered]@{ tclient = 'patch/module.patch'; ddnet = 'patch/ddnet.patch' }
+$meta.patches = [ordered]@{ tclient = 'patch/module.patch'; 'ddnet@19.9' = 'patch/ddnet.patch'; 'ddnet@20.1' = 'patch/ddnet-20.1.patch' }
 $json = $meta | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText((Join-Path $stage 'module.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
 
-# Patches: TClient baseline (patch\ddnet-background.patch -> patch/module.patch inside the dmod)
-# and DDNet official 19.9 baseline (patch\ddnet-19.9.patch -> patch/ddnet.patch).
+# Patches: TClient baseline (patch\ddnet-background.patch -> patch/module.patch),
+# DDNet 19.9 (patch\ddnet-19.9.patch -> patch/ddnet.patch),
+# DDNet 20.1 (patch\ddnet-20.1.patch -> patch/ddnet-20.1.patch).
 $patch = Join-Path $root 'patch\ddnet-background.patch'
 if (-not (Test-Path $patch)) { throw "missing patch (TClient baseline): $patch" }
 Copy-Item $patch (Join-Path $stage 'patch\module.patch') -Force
 $patchDdnet = Join-Path $root 'patch\ddnet-19.9.patch'
-if (-not (Test-Path $patchDdnet)) { throw "missing patch (DDNet baseline): $patchDdnet" }
+if (-not (Test-Path $patchDdnet)) { throw "missing patch (DDNet 19.9 baseline): $patchDdnet" }
 Copy-Item $patchDdnet (Join-Path $stage 'patch\ddnet.patch') -Force
+$patchDdnet201 = Join-Path $root 'patch\ddnet-20.1.patch'
+if (-not (Test-Path $patchDdnet201)) { throw "missing patch (DDNet 20.1 baseline): $patchDdnet201" }
+Copy-Item $patchDdnet201 (Join-Path $stage 'patch\ddnet-20.1.patch') -Force
 
 # 新增源文件（手工安装用）
 Get-ChildItem (Join-Path $root 'files') -File | Copy-Item -Destination (Join-Path $stage 'files') -Force
