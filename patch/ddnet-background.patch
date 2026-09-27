@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 4185f978a..2b1a72e3a 100644
+index 4185f97..2b1a72e 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -2787,6 +2787,8 @@ if(CLIENT)
@@ -29,7 +29,7 @@ index 4185f978a..2b1a72e3a 100644
      gameclient.h
      laser_data.cpp
 diff --git a/cmake/FindFFMPEG.cmake b/cmake/FindFFMPEG.cmake
-index dfcd66ff5..3791d06ee 100644
+index dfcd66f..3791d06 100644
 --- a/cmake/FindFFMPEG.cmake
 +++ b/cmake/FindFFMPEG.cmake
 @@ -150,11 +150,11 @@ set(FFMPEG_COPY_FILES)
@@ -50,7 +50,7 @@ index dfcd66ff5..3791d06ee 100644
    elseif(TARGET_OS STREQUAL "mac")
      set(FFMPEG_COPY_FILES
 diff --git a/data/tclient/languages/simplified_chinese.txt b/data/tclient/languages/simplified_chinese.txt
-index 825b37916..4f172f883 100644
+index 825b379..4f172f8 100644
 --- a/data/tclient/languages/simplified_chinese.txt
 +++ b/data/tclient/languages/simplified_chinese.txt
 @@ -935,3 +935,199 @@ Run a console command on join
@@ -254,7 +254,7 @@ index 825b37916..4f172f883 100644
 +== 模块
 +
 diff --git a/data/tclient/languages/traditional_chinese.txt b/data/tclient/languages/traditional_chinese.txt
-index 9d0636263..a143c6b39 100644
+index 9d06362..a143c6b 100644
 --- a/data/tclient/languages/traditional_chinese.txt
 +++ b/data/tclient/languages/traditional_chinese.txt
 @@ -872,3 +872,69 @@ Changing name to %s near finish
@@ -328,7 +328,7 @@ index 9d0636263..a143c6b39 100644
 +This build has no video support.
 +== 目前版本不支援影片。
 diff --git a/src/engine/client/backend/null/backend_null.cpp b/src/engine/client/backend/null/backend_null.cpp
-index 1e2f27d17..20e64080d 100644
+index 1e2f27d..20e6408 100644
 --- a/src/engine/client/backend/null/backend_null.cpp
 +++ b/src/engine/client/backend/null/backend_null.cpp
 @@ -16,6 +16,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_Null::RunCommand(const CCommand
@@ -342,7 +342,7 @@ index 1e2f27d17..20e64080d 100644
  		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
  		break;
 diff --git a/src/engine/client/backend/opengl/backend_opengl.cpp b/src/engine/client/backend/opengl/backend_opengl.cpp
-index 64b3ea20a..e411f5c86 100644
+index 64b3ea2..e411f5c 100644
 --- a/src/engine/client/backend/opengl/backend_opengl.cpp
 +++ b/src/engine/client/backend/opengl/backend_opengl.cpp
 @@ -729,8 +729,7 @@ void CCommandProcessorFragment_OpenGL::DestroyTexture(int Slot)
@@ -378,7 +378,7 @@ index 64b3ea20a..e411f5c86 100644
  		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
  		break;
 diff --git a/src/engine/client/backend/opengl/backend_opengl.h b/src/engine/client/backend/opengl/backend_opengl.h
-index dffac0844..50ba207ed 100644
+index dffac08..50ba207 100644
 --- a/src/engine/client/backend/opengl/backend_opengl.h
 +++ b/src/engine/client/backend/opengl/backend_opengl.h
 @@ -98,6 +98,7 @@ protected:
@@ -390,7 +390,7 @@ index dffac0844..50ba207ed 100644
  	virtual void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand);
  	virtual void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand);
 diff --git a/src/engine/client/backend/opengl/backend_opengl3.cpp b/src/engine/client/backend/opengl/backend_opengl3.cpp
-index e635e7e3c..94670a67e 100644
+index e635e7e..94670a6 100644
 --- a/src/engine/client/backend/opengl/backend_opengl3.cpp
 +++ b/src/engine/client/backend/opengl/backend_opengl3.cpp
 @@ -718,6 +718,11 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTexture_Update(const CCommandB
@@ -406,7 +406,7 @@ index e635e7e3c..94670a67e 100644
  {
  	DestroyTexture(pCommand->m_Slot);
 diff --git a/src/engine/client/backend/opengl/backend_opengl3.h b/src/engine/client/backend/opengl/backend_opengl3.h
-index df044a36a..c47c72675 100644
+index df044a3..c47c726 100644
 --- a/src/engine/client/backend/opengl/backend_opengl3.h
 +++ b/src/engine/client/backend/opengl/backend_opengl3.h
 @@ -87,6 +87,7 @@ protected:
@@ -418,7 +418,7 @@ index df044a36a..c47c72675 100644
  	void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand) override;
  	void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand) override;
 diff --git a/src/engine/client/graphics_threaded.cpp b/src/engine/client/graphics_threaded.cpp
-index d626e0359..c079ff370 100644
+index d626e03..c079ff3 100644
 --- a/src/engine/client/graphics_threaded.cpp
 +++ b/src/engine/client/graphics_threaded.cpp
 @@ -176,6 +176,13 @@ void CGraphics_Threaded::WrapClamp()
@@ -493,7 +493,7 @@ index d626e0359..c079ff370 100644
  {
  	SWarning Warning;
 diff --git a/src/engine/client/graphics_threaded.h b/src/engine/client/graphics_threaded.h
-index c70225e89..352ea7857 100644
+index c70225e..352ea78 100644
 --- a/src/engine/client/graphics_threaded.h
 +++ b/src/engine/client/graphics_threaded.h
 @@ -123,6 +123,7 @@ public:
@@ -546,7 +546,7 @@ index c70225e89..352ea7857 100644
  	CTextureHandle LoadSpriteTexture(const CImageInfo &FromImageInfo, const std::optional<CImageInfo> &FallbackImageInfo, const struct CDataSprite *pSprite) override;
  
 diff --git a/src/engine/graphics.h b/src/engine/graphics.h
-index 342b4822f..f89fa7407 100644
+index 342b482..f89fa74 100644
 --- a/src/engine/graphics.h
 +++ b/src/engine/graphics.h
 @@ -255,6 +255,10 @@ public:
@@ -583,7 +583,7 @@ index 342b4822f..f89fa7407 100644
  	void TextureClear() { TextureSet(CTextureHandle()); }
  
 diff --git a/src/engine/shared/config_variables.h b/src/engine/shared/config_variables.h
-index ab3052732..717fda78b 100644
+index ab30527..717fda7 100644
 --- a/src/engine/shared/config_variables.h
 +++ b/src/engine/shared/config_variables.h
 @@ -226,7 +226,7 @@ MACRO_CONFIG_STR(ClDummy7SkinEyes, dummy7_skin_eyes, protocol7::MAX_SKIN_ARRAY_S
@@ -596,7 +596,7 @@ index ab3052732..717fda78b 100644
  MACRO_CONFIG_INT(UiToolboxPage, ui_toolbox_page, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Toolbox page")
  MACRO_CONFIG_STR(UiServerAddress, ui_server_address, 1024, "localhost:8303", CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_INSENSITIVE, "Interface server address")
 diff --git a/src/engine/shared/config_variables_tclient.h b/src/engine/shared/config_variables_tclient.h
-index 2d3706f38..c31053934 100644
+index 2d3706f..c310539 100644
 --- a/src/engine/shared/config_variables_tclient.h
 +++ b/src/engine/shared/config_variables_tclient.h
 @@ -285,3 +285,21 @@ MACRO_CONFIG_INT(TcUiCompactList, tc_ui_compact_list, 0, 0, 1, CFGFLAG_CLIENT |
@@ -622,7 +622,7 @@ index 2d3706f38..c31053934 100644
 +MACRO_CONFIG_INT(McBackgroundMode, mc_background_mode, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "How the background fills the screen (never letterboxed): 0 = crop top/bottom (keep the whole width), 1 = crop left/right (keep the whole height), 2 = stretch, 3 = tile. Only one crop direction can avoid bars for a given video/screen, so the other falls back to it")
 +MACRO_CONFIG_INT(McBackgroundVideoRes, mc_background_video_res, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Video decode resolution for the background: 0 = original source size (no downscale), 1 = 2160p, 2 = 1440p, 3 = 1080p, 4 = 720p. Lower it only if a large video is too heavy; it never depends on the screen")
 diff --git a/src/game/client/components/background.cpp b/src/game/client/components/background.cpp
-index 21a03065d..478e9211f 100644
+index 21a0306..478e921 100644
 --- a/src/game/client/components/background.cpp
 +++ b/src/game/client/components/background.cpp
 @@ -34,6 +34,7 @@ void CBackground::OnInit()
@@ -659,7 +659,7 @@ index 21a03065d..478e9211f 100644
  
  	if(g_Config.m_ClOverlayEntities != 100)
 diff --git a/src/game/client/components/background.h b/src/game/client/components/background.h
-index 0fd20e19a..f584037da 100644
+index 0fd20e1..f584037 100644
 --- a/src/game/client/components/background.h
 +++ b/src/game/client/components/background.h
 @@ -3,6 +3,7 @@
@@ -682,10 +682,10 @@ index 0fd20e19a..f584037da 100644
  	~CBackground() override;
 diff --git a/src/game/client/components/custom_background.cpp b/src/game/client/components/custom_background.cpp
 new file mode 100644
-index 000000000..6ad510975
+index 0000000..61fe5b9
 --- /dev/null
 +++ b/src/game/client/components/custom_background.cpp
-@@ -0,0 +1,1092 @@
+@@ -0,0 +1,1104 @@
 +#include "custom_background.h"
 +
 +#include <base/fs.h>
@@ -1425,10 +1425,19 @@ index 000000000..6ad510975
 +	// two are now separate:
 +	//   mc_background_video_res = 0 (default) -> decode at the source size
 +	//                           1..4           -> cap the height (2160/1440/1080/720)
-+	// Capping is purely an opt-in performance trade-off, never a screen effect.
++	// 另外始终再压一道"屏幕分辨率"：全屏背景显示不出比屏幕更细的细节，超过屏幕只是白烧
++	// CPU/显存，而上传量随分辨率平方增长（4K 会走 4096x4096 的 2 的幂纹理，每帧约 67MB），
++	// 这正是 4K 视频卡顿的来源。压到屏幕后，8K/4K 的源与 1K 的源在同一块屏上负载一致。
 +	static constexpr int s_apVideoResHeights[] = {0, 2160, 1440, 1080, 720};
 +	const int VideoResIndex = std::clamp(g_Config.m_McBackgroundVideoRes, 0, 4);
-+	const int CapHeight = s_apVideoResHeights[VideoResIndex];
++	int CapHeight = s_apVideoResHeights[VideoResIndex];
++	int ScreenCapH = g_Config.m_GfxScreenHeight;
++	if(m_pGraphics != nullptr && ScreenCapH > 0)
++		ScreenCapH = (int)((float)ScreenCapH * m_pGraphics->ScreenHiDPIScale() + 0.5f);
++	if(ScreenCapH <= 0)
++		ScreenCapH = 1080;   // 拿不到屏幕参数时的保守值
++	if(CapHeight <= 0 || CapHeight > ScreenCapH)
++		CapHeight = ScreenCapH;
 +	m_Width = m_SrcWidth;
 +	m_Height = m_SrcHeight;
 +	if(CapHeight > 0 && m_SrcHeight > CapHeight)
@@ -1481,8 +1490,11 @@ index 000000000..6ad510975
 +
 +	// Scale the source straight into the padded RGBA frame: the video occupies
 +	// the top-left m_Width x m_Height rectangle, the rest is padding.
++	// 用 FAST_BILINEAR：4K 源每帧要缩到屏幕尺寸，实测 SWS_BILINEAR 单帧就要 ~21.5ms，
++	// 直接拖到视频只有 ~15fps；FAST_BILINEAR 的滤波抽头少得多，背景视频（本来就全屏
++	// 铺开、还会被 fit/裁切）看不出画质差别，但能明显提高可达帧率（实测 21.5→10.2ms）。
 +	m_pSwsCtx = sws_getContext(m_SrcWidth, m_SrcHeight, m_pCodecCtx->pix_fmt, m_Width, m_Height, AV_PIX_FMT_RGBA,
-+		SWS_BILINEAR, nullptr, nullptr, nullptr);
++		SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 +	if(m_pSwsCtx == nullptr)
 +	{
 +		SetStatus(EStatus::FAILED_SCALER);
@@ -1780,7 +1792,7 @@ index 000000000..6ad510975
 +}
 diff --git a/src/game/client/components/custom_background.h b/src/game/client/components/custom_background.h
 new file mode 100644
-index 000000000..528184378
+index 0000000..5281843
 --- /dev/null
 +++ b/src/game/client/components/custom_background.h
 @@ -0,0 +1,138 @@
@@ -1923,7 +1935,7 @@ index 000000000..528184378
 +
 +#endif
 diff --git a/src/game/client/components/menus.cpp b/src/game/client/components/menus.cpp
-index 8fecea4e1..1143183db 100644
+index 8fecea4..4672a23 100644
 --- a/src/game/client/components/menus.cpp
 +++ b/src/game/client/components/menus.cpp
 @@ -131,6 +131,11 @@ int CMenus::DoButton_Menu(CButtonContainer *pButtonContainer, const char *pText,
@@ -2001,7 +2013,7 @@ index 8fecea4e1..1143183db 100644
  		{
  			RenderBackground();
  		}
-@@ -1038,6 +1074,32 @@ void CMenus::Render()
+@@ -1038,6 +1074,35 @@ void CMenus::Render()
  		Screen.Margin(10.0f, &Screen);
  	}
  
@@ -2011,7 +2023,10 @@ index 8fecea4e1..1143183db 100644
 +	// settings screen the category list owns that corner). Restricted to offline
 +	// with no popup, so a hidden interface can never hide a loading, connecting
 +	// or warning dialog.
-+	const bool HideGuiAvailable = ClientState == IClient::STATE_OFFLINE && m_Popup == POPUP_NONE && m_ShowStart;
++	// 背景模块：可用范围 = 离线、无弹窗、且不在设置页（设置页右下角被分类列表占用）。
++	// **不能用 m_ShowStart 当条件**——开了 cl_skip_start_menu 的用户 m_ShowStart 恒为 false，
++	// 按钮就永远不会出现（DDNet 基线实测正是这么被挡掉的）。
++	const bool HideGuiAvailable = ClientState == IClient::STATE_OFFLINE && m_Popup == POPUP_NONE && m_MenuPage != PAGE_SETTINGS;
 +	if(!HideGuiAvailable)
 +		m_HideGui = false;
 +	if(m_HideGui)
@@ -2034,7 +2049,7 @@ index 8fecea4e1..1143183db 100644
  	switch(ClientState)
  	{
  	case IClient::STATE_QUITTING:
-@@ -1156,6 +1218,10 @@ void CMenus::Render()
+@@ -1156,6 +1221,10 @@ void CMenus::Render()
  		break;
  	}
  
@@ -2045,7 +2060,7 @@ index 8fecea4e1..1143183db 100644
  	Ui()->RenderPopupMenus();
  
  	// Prevent UI elements from being hovered while a key reader is active
-@@ -2275,6 +2341,9 @@ void CMenus::SetActive(bool Active)
+@@ -2275,6 +2344,9 @@ void CMenus::SetActive(bool Active)
  		Ui()->SetActiveItem(nullptr);
  	}
  	m_MenuActive = Active;
@@ -2055,7 +2070,7 @@ index 8fecea4e1..1143183db 100644
  	if(!m_MenuActive)
  	{
  		if(m_NeedSendinfo)
-@@ -2431,9 +2500,18 @@ void CMenus::UpdateColors()
+@@ -2431,9 +2503,18 @@ void CMenus::UpdateColors()
  {
  	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
  
@@ -2078,7 +2093,7 @@ index 8fecea4e1..1143183db 100644
  	const float ColorIngameScaleI = 0.5f;
  	const float ColorIngameScaleA = 0.2f;
 diff --git a/src/game/client/components/menus.h b/src/game/client/components/menus.h
-index 90e347fc3..dabf10478 100644
+index 90e347f..dabf104 100644
 --- a/src/game/client/components/menus.h
 +++ b/src/game/client/components/menus.h
 @@ -17,7 +17,9 @@
@@ -2122,7 +2137,7 @@ index 90e347fc3..dabf10478 100644
  
  	// found in menus_ingame.cpp
 diff --git a/src/game/client/components/menus_settings.cpp b/src/game/client/components/menus_settings.cpp
-index de6ace756..395c458c0 100644
+index de6ace7..395c458 100644
 --- a/src/game/client/components/menus_settings.cpp
 +++ b/src/game/client/components/menus_settings.cpp
 @@ -54,6 +54,7 @@ void CMenus::RenderSettings(CUIRect MainView)
@@ -2147,7 +2162,7 @@ index de6ace756..395c458c0 100644
  		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_CREDITS);
 diff --git a/src/game/client/components/menus_settings_mycustom.cpp b/src/game/client/components/menus_settings_mycustom.cpp
 new file mode 100644
-index 000000000..696c76c27
+index 0000000..696c76c
 --- /dev/null
 +++ b/src/game/client/components/menus_settings_mycustom.cpp
 @@ -0,0 +1,617 @@
@@ -2769,7 +2784,7 @@ index 000000000..696c76c27
 +	} // if(s_ActiveModuleTab == 0)  —— 模块：背景
 +}
 diff --git a/src/game/client/components/menus_start.cpp b/src/game/client/components/menus_start.cpp
-index 6ea198a3b..74ba0ff97 100644
+index 6ea198a..74ba0ff 100644
 --- a/src/game/client/components/menus_start.cpp
 +++ b/src/game/client/components/menus_start.cpp
 @@ -25,13 +25,16 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
@@ -2798,7 +2813,7 @@ index 6ea198a3b..74ba0ff97 100644
  	const float VMargin = MainView.w / 2 - 190.0f;
 diff --git a/src/game/client/components/wallpaper_engine.cpp b/src/game/client/components/wallpaper_engine.cpp
 new file mode 100644
-index 000000000..a4c2e21eb
+index 0000000..a4c2e21
 --- /dev/null
 +++ b/src/game/client/components/wallpaper_engine.cpp
 @@ -0,0 +1,442 @@
@@ -3246,7 +3261,7 @@ index 000000000..a4c2e21eb
 +}
 diff --git a/src/game/client/components/wallpaper_engine.h b/src/game/client/components/wallpaper_engine.h
 new file mode 100644
-index 000000000..d1ca9be63
+index 0000000..d1ca9be
 --- /dev/null
 +++ b/src/game/client/components/wallpaper_engine.h
 @@ -0,0 +1,83 @@

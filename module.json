@@ -4,7 +4,7 @@
 
   "id": "background",
   "name": "自定义背景（图片 / 视频动态背景）",
-  "version": "1.1",
+  "version": "1.2",
   "type": "source-patch",
   "description": "主菜单与游戏内实体层自定义背景：图片与视频、fps 上限、播放分辨率、显示方式（不留黑边）、Wallpaper Engine 壁纸、隐藏 GUI、菜单阴影五档",
   "tested_on": ["TaterClient/TClient@6b4118bf0", "ddnet/ddnet@19.9", "ddnet/ddnet@20.1"],
@@ -18,7 +18,7 @@
   "upstream": { "project": "TaterClient/TClient", "version": "10.9.0", "base_commit": "6b4118bf0", "based_on": "ddnet/ddnet" },
   "installers": ["apply.ps1", "apply.sh", "install.ps1"],
   "uninstall": "git apply -R patch/ddnet-background.patch（DDNet 基线用 patch/ddnet-19.9.patch）",
-  "diffstat": { "tclient": { "files_changed": 25, "insertions": 2912, "deletions": 22 }, "ddnet": { "files_changed": 22, "insertions": 2638, "deletions": 23 } },
+  "diffstat": { "tclient": { "files_changed": 25, "insertions": 2916, "deletions": 22 }, "ddnet@19.9": { "files_changed": 17, "insertions": 2571, "deletions": 8 }, "ddnet@20.1": { "files_changed": 17, "insertions": 2572, "deletions": 7 } },
   "config_variables": ["mc_menu_background","mc_game_background","mc_background_path","mc_background_source","mc_background_video_fps","mc_background_video_res","mc_background_fit","mc_background_mode","mc_background_threads","mc_background_diag","mc_we_path","mc_ui_panel_alpha","mc_menu_title"],
   "background_folder": "<save dir>/Background",
   "scope": "local and visual only: no changes to network protocol, prediction, collisions or ticks"

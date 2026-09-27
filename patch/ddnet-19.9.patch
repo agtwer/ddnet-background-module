@@ -252,10 +252,10 @@ index b091e83..2cdb6cf 100644
  MACRO_CONFIG_STR(UiServerAddress, ui_server_address, 1024, "localhost:8303", CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_INSENSITIVE, "Interface server address")
 diff --git a/src/game/client/components/custom_background.cpp b/src/game/client/components/custom_background.cpp
 new file mode 100644
-index 0000000..899126a
+index 0000000..ae4ca6a
 --- /dev/null
 +++ b/src/game/client/components/custom_background.cpp
-@@ -0,0 +1,1094 @@
+@@ -0,0 +1,1106 @@
 +#include "custom_background.h"
 +
 +#include <base/fs.h>
@@ -995,10 +995,19 @@ index 0000000..899126a
 +	// two are now separate:
 +	//   mc_background_video_res = 0 (default) -> decode at the source size
 +	//                           1..4           -> cap the height (2160/1440/1080/720)
-+	// Capping is purely an opt-in performance trade-off, never a screen effect.
++	// 另外始终再压一道"屏幕分辨率"：全屏背景显示不出比屏幕更细的细节，超过屏幕只是白烧
++	// CPU/显存，而上传量随分辨率平方增长（4K 会走 4096x4096 的 2 的幂纹理，每帧约 67MB），
++	// 这正是 4K 视频卡顿的来源。压到屏幕后，8K/4K 的源与 1K 的源在同一块屏上负载一致。
 +	static constexpr int s_apVideoResHeights[] = {0, 2160, 1440, 1080, 720};
 +	const int VideoResIndex = std::clamp(g_Config.m_McBackgroundVideoRes, 0, 4);
-+	const int CapHeight = s_apVideoResHeights[VideoResIndex];
++	int CapHeight = s_apVideoResHeights[VideoResIndex];
++	int ScreenCapH = g_Config.m_GfxScreenHeight;
++	if(m_pGraphics != nullptr && ScreenCapH > 0)
++		ScreenCapH = (int)((float)ScreenCapH * m_pGraphics->ScreenHiDPIScale() + 0.5f);
++	if(ScreenCapH <= 0)
++		ScreenCapH = 1080;   // 拿不到屏幕参数时的保守值
++	if(CapHeight <= 0 || CapHeight > ScreenCapH)
++		CapHeight = ScreenCapH;
 +	m_Width = m_SrcWidth;
 +	m_Height = m_SrcHeight;
 +	if(CapHeight > 0 && m_SrcHeight > CapHeight)
@@ -1051,8 +1060,11 @@ index 0000000..899126a
 +
 +	// Scale the source straight into the padded RGBA frame: the video occupies
 +	// the top-left m_Width x m_Height rectangle, the rest is padding.
++	// 用 FAST_BILINEAR：4K 源每帧要缩到屏幕尺寸，实测 SWS_BILINEAR 单帧就要 ~21.5ms，
++	// 直接拖到视频只有 ~15fps；FAST_BILINEAR 的滤波抽头少得多，背景视频（本来就全屏
++	// 铺开、还会被 fit/裁切）看不出画质差别，但能明显提高可达帧率（实测 21.5→10.2ms）。
 +	m_pSwsCtx = sws_getContext(m_SrcWidth, m_SrcHeight, m_pCodecCtx->pix_fmt, m_Width, m_Height, AV_PIX_FMT_RGBA,
-+		SWS_BILINEAR, nullptr, nullptr, nullptr);
++		SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 +	if(m_pSwsCtx == nullptr)
 +	{
 +		SetStatus(EStatus::FAILED_SCALER);
@@ -1495,7 +1507,7 @@ index 0000000..5281843
 +
 +#endif
 diff --git a/src/game/client/components/menus.cpp b/src/game/client/components/menus.cpp
-index 6cd6645..d5fe20d 100644
+index 6cd6645..1fc6911 100644
 --- a/src/game/client/components/menus.cpp
 +++ b/src/game/client/components/menus.cpp
 @@ -130,6 +130,8 @@ int CMenus::DoButton_Menu(CButtonContainer *pButtonContainer, const char *pText,
@@ -1524,7 +1536,39 @@ index 6cd6645..d5fe20d 100644
  	if(g_Config.m_ClShowWelcome)
  	{
  		m_Popup = POPUP_LANGUAGE;
-@@ -1068,7 +1071,7 @@ void CMenus::Render()
+@@ -1007,6 +1010,31 @@ bool CMenus::CanDisplayWarning() const
+ 	return m_Popup == POPUP_NONE;
+ }
+ 
++// 背景模块：主菜单右下角的"隐藏全部界面"开关。
++// 图标沿用菜单同一套 Font Awesome 字体（FontIcon::EYE / EYE_SLASH），风格与游戏自身一致。
++void CMenus::RenderHideGuiButton(const CUIRect &Screen)
++{
++	constexpr float Size = 30.0f;
++	constexpr float MarginRight = 12.0f;
++	constexpr float MarginBottom = 50.0f;
++
++	CUIRect Button;
++	Button.x = Screen.x + Screen.w - Size - MarginRight;
++	Button.y = Screen.y + Screen.h - Size - MarginBottom;
++	Button.w = Size;
++	Button.h = Size;
++
++	static CButtonContainer s_HideGuiButton;
++	// 眼睛划掉 = "把界面藏起来"；眼睛 = "把界面叫回来"
++	const char *pIcon = m_HideGui ? FontIcon::EYE : FontIcon::EYE_SLASH;
++	// 隐藏后只剩这一个控件，底色给足，亮背景上也找得到
++	const float PanelAlpha = m_HideGui ? 0.45f : 0.25f;
++	if(Ui()->DoButton_FontIcon(&s_HideGuiButton, pIcon, 0, &Button, BUTTONFLAG_LEFT, IGraphics::CORNER_ALL, true, ColorRGBA(0.0f, 0.0f, 0.0f, PanelAlpha)))
++	{
++		m_HideGui = !m_HideGui;
++	}
++}
++
+ void CMenus::Render()
+ {
+ 	Ui()->MapScreen();
+@@ -1068,7 +1096,7 @@ void CMenus::Render()
  	}
  	else
  	{
@@ -1533,8 +1577,74 @@ index 6cd6645..d5fe20d 100644
  		{
  			RenderBackground();
  		}
+@@ -1083,6 +1111,26 @@ void CMenus::Render()
+ 		Screen.Margin(10.0f, &Screen);
+ 	}
+ 
++	// 背景模块：沉浸式隐藏全部界面。可用范围 = 离线、无弹窗、且不在设置页：
++	// 主菜单各页右下角都是空的，而设置页那一角被分类列表占用。**不能用 m_ShowStart 当条件**
++	// ——开了 cl_skip_start_menu 的用户 m_ShowStart 恒为 false，按钮就永远不会出现。
++	const bool HideGuiAvailable = ClientState == IClient::STATE_OFFLINE && m_Popup == POPUP_NONE && m_MenuPage != PAGE_SETTINGS;
++	if(!HideGuiAvailable)
++		m_HideGui = false;
++	if(m_HideGui)
++	{
++		// 其余菜单元素全部跳过；Esc 在这里被消费，于是它变成"把界面叫回来"
++		if(Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE))
++		{
++			m_HideGui = false;
++		}
++		else
++		{
++			RenderHideGuiButton(Screen);
++			return;
++		}
++	}
++
+ 	switch(ClientState)
+ 	{
+ 	case IClient::STATE_QUITTING:
+@@ -1201,6 +1249,10 @@ void CMenus::Render()
+ 		break;
+ 	}
+ 
++	// 背景模块：沉浸式开关，画在当前菜单页之上
++	if(HideGuiAvailable)
++		RenderHideGuiButton(Screen);
++
+ 	Ui()->RenderPopupMenus();
+ 
+ 	// Prevent UI elements from being hovered while a key reader is active
+@@ -2391,6 +2443,9 @@ void CMenus::SetActive(bool Active)
+ 		Ui()->SetActiveItem(nullptr);
+ 	}
+ 	m_MenuActive = Active;
++	// 背景模块：菜单关掉后绝不能把界面留在"隐藏"状态
++	if(!Active)
++		m_HideGui = false;
+ 	if(!m_MenuActive)
+ 	{
+ 		if(m_NeedSendinfo)
+@@ -2547,9 +2602,14 @@ void CMenus::UpdateColors()
+ {
+ 	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
+ 
+-	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f);
+-	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);
+-	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f);
++	// 背景模块：黑面板整体不透明度（mc_ui_panel_alpha，0..25，25 = 引擎原本的 0.25）。
++	// 标签按钮与设置页那个大底板都由下面这几个颜色构建，所以在这里统一缩放即可覆盖整个
++	// 菜单外壳；本模块自己的设置页各行另外也按这个值画。25 是默认值 → 系数正好 1.0。
++	const float PanelAlpha = std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 25.0f;
++
++	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f * PanelAlpha);
++	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f * PanelAlpha);
++	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f * PanelAlpha);
+ 
+ 	const float ColorIngameScaleI = 0.5f;
+ 	const float ColorIngameScaleA = 0.2f;
 diff --git a/src/game/client/components/menus.h b/src/game/client/components/menus.h
-index 74a80fd..57dcdf2 100644
+index 74a80fd..0608473 100644
 --- a/src/game/client/components/menus.h
 +++ b/src/game/client/components/menus.h
 @@ -16,6 +16,8 @@
@@ -1546,7 +1656,25 @@ index 74a80fd..57dcdf2 100644
  #include <game/client/components/mapimages.h>
  #include <game/client/components/menus_ingame_touch_controls.h>
  #include <game/client/components/menus_settings_controls.h>
-@@ -685,6 +687,7 @@ public:
+@@ -143,6 +145,8 @@ protected:
+ 	int m_Popup;
+ 	bool m_ShowStart;
+ 	bool m_MenuActive;
++	// 沉浸式隐藏界面（背景模块）：主菜单右下角那只眼睛按钮的状态
++	bool m_HideGui = false;
+ 
+ 	bool m_DummyNamePlatePreview = false;
+ 
+@@ -463,6 +467,8 @@ protected:
+ 
+ 	// found in menus.cpp
+ 	void Render();
++	// 背景模块：主菜单右下角的"隐藏全部界面"开关（沉浸式看背景）
++	void RenderHideGuiButton(const CUIRect &Screen);
+ 	void RenderPopupFullscreen(CUIRect Screen);
+ 	void RenderPopupConnecting(CUIRect Screen);
+ 	void RenderPopupLoading(CUIRect Screen);
+@@ -685,6 +691,7 @@ public:
  		SETTINGS_SOUND,
  		SETTINGS_DDNET,
  		SETTINGS_ASSETS,
@@ -1554,7 +1682,7 @@ index 74a80fd..57dcdf2 100644
  
  		SETTINGS_LENGTH,
  	};
-@@ -824,6 +827,10 @@ private:
+@@ -824,6 +831,10 @@ private:
  	CMenusSettingsControls m_MenusSettingsControls;
  	friend CMenusSettingsControls;
  	CMenusStart m_MenusStart;
