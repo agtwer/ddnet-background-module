@@ -1,15 +1,15 @@
 # ddnet-background-module
 
-把「自定义背景（图片 / 视频动态背景）」做成**可插拔的源码模块**：给一份干净的 TClient 源码打一个补丁即得到完整功能，不打补丁就是原版客户端。
+这是一个**基于 DDNet 的背景模块**：把「自定义背景（图片 / 视频动态背景）」做成可插拔的源码模块——给一份干净的 DDNet / TClient 源码打一个补丁即得到完整功能，不打补丁就是原版客户端。
 
-> **它不是运行时插件（不是 DLL）**：DDNet / TClient 没有插件 ABI，而这个功能需要**引擎级渲染支持**（新的纹理更新命令、`NO_MIPMAPS`、重复寻址）和菜单渲染钩子，所以模块形式只能是 **源码补丁 + 一键安装脚本**。想做成"丢一个 dll 进 data/ 就生效"在本项目上不可能，这里不做没有依据的承诺。
+> **它不是运行时插件（不是 DLL）**：DDNet / TClient 没有插件 ABI，而这个功能需要引擎级渲染支持（新的纹理更新命令、重复寻址）和菜单渲染钩子，所以模块形式只能是源码补丁 + 一键安装脚本。想做成"丢一个 dll 进 data/ 就生效"在本项目上不可能，这里不做没有依据的承诺。
 
-## 一键安装（两种）
+## 安装方法
 
-| 方式 | 做法 | 适合 |
+| 方式 | 做法 | 获取来源 |
 |---|---|---|
-| **A. 免编译直装包** | 解压 → 双击 `DDNet.exe` | 只想玩（`ddnet-background-module-prebuilt-win64.zip`，Windows x64，约 108MB，内含 exe + 全部 DLL + data + FFmpeg 8.1） |
-| **B. 一条命令全自动** | `powershell -ExecutionPolicy Bypass -File install.ps1` | 想自己编译（自动完成：拉源码@基线提交 → 子模块 → 打补丁 → 装 FFmpeg 8.1 → cmake 构建 → 组装 `dist\` 可直接双击的目录）。**镜像默认就开**（`ghproxy.net`），可换 `-Mirror hk.gh-proxy.org`、关掉用 `-MirrorOff`；本机有代理就加 `-Proxy 127.0.0.1:7890`（代理同时作用于 git 与 FFmpeg 下载，也会带给子模块那 580MB） |
+| **A. 程序一键部署** | 用安装器选模块后一键完成：拉源码 → 打补丁 → 装 FFmpeg 8.1 → 编译 → 组装出可直接双击的客户端目录 | **ddnet-module-installer**：<https://github.com/agtwer/ddnet-module-installer>（把 `dist/background-1.0.dmod` 放进安装器的 `mods\`，或直接拖进窗口） |
+| **B. 一条命令全自动** | `powershell -ExecutionPolicy Bypass -File install.ps1`（自动完成：拉源码@基线提交 → 子模块 → 打补丁 → 装 FFmpeg 8.1 → cmake 构建 → 组装 `dist\` 可直接双击的目录）。**镜像默认就开**（`ghproxy.net`），可换 `-Mirror hk.gh-proxy.org`、关掉用 `-MirrorOff`；本机有代理就加 `-Proxy 127.0.0.1:7890`（代理同时作用于 git 与 FFmpeg 下载，也会带给子模块那 580MB） | git clone 本页：`git clone https://github.com/agtwer/ddnet-background-module` |
 
 ```powershell
 # B 的常用变体
@@ -28,13 +28,13 @@ install.ps1 -SkipFfmpeg -FfmpegZip C:\dl\ffmpeg.zip
 
 | 基线 | 状态 | 说明 |
 |---|---|---|
-| **TClient 10.9.0**（`6b4118bf0`） | ✅ **完整验证** | 补丁干净套用 + 内容 25/25 一致 + 编译通过 + 实机逐项验证。容器内是 `patch/module.patch`。 |
-| **DDNet 官方版 19.9** | ✅ **编译验证通过** | 有**专用补丁** `patch/ddnet-19.9.patch`（容器内 `patch/ddnet.patch`）：DDNet 没有 `CScreenRect`/`GetScreen()` 结构体重载（改用四浮点 `GetScreen(&x,&y,&x2,&y2)`）、没有 `TCLocalize`（改 `Localize`，两参数形式取回退串）、配置变量加在公共 `config_variables.h`（TClient 是它自己的 `config_variables_tclient.h`）、`UiPage` 上限放宽、设置页枚举/标签/CMake 源列表按 DDNet 结构落位。22 文件 2638 行，一次编译通过并产出 `DDNet.exe`。 |
+| **TClient 10.9.0**（`6b4118bf0`） | ✅ **完整验证** | 补丁干净套用 + 内容 25/25 一致 + 编译通过 + 实机逐项验证；容器内是 `patch/module.patch` |
+| **DDNet 官方版 19.9** | ✅ **完整验证** | 有**专用补丁** `patch/ddnet-19.9.patch`（容器内 `patch/ddnet.patch`）：DDNet 没有 `CScreenRect`/`GetScreen()` 结构体重载（改用四浮点 `GetScreen(&x,&y,&x2,&y2)`）、没有 `TCLocalize`（改 `Localize`，两参数形式取回退串）、配置变量加在公共 `config_variables.h`（TClient 是它自己的 `config_variables_tclient.h`）、`UiPage` 上限放宽、设置页枚举/标签/源文件列表按 DDNet 结构落位；17 文件 2495 行，编译 0 错误并实机验收 |
 | **其它第三方分支** | ⚠️ **通用做法** | 耦合面只有 6 处，用 `-Reject` 半自动套用 + 按锚点手工贴 |
 
-**多基线补丁机制**：`module.json` 里用 `patches` 映射按来源 id 给不同上游各带一份补丁（`{"tclient":"patch/module.patch","ddnet":"patch/ddnet.patch"}`），旧的单数 `patch` 仍作默认回退。安装器识别当前选择的上游后自动取对应那份，日志会写明「使用 ddnet 专用补丁」；某上游没有专用补丁时回退通用补丁并告警。
+**多基线补丁机制**：`module.json` 里用 `patches` 映射按来源 id 给不同上游各带一份补丁（`{"tclient":"patch/module.patch","ddnet":"patch/ddnet.patch"}`），旧的单数 `patch` 仍作默认回退；安装器识别当前选择的上游后自动取对应那份，日志会写明「使用 ddnet 专用补丁」，某上游没有专用补丁时回退通用补丁并告警。
 
-**为什么不做成"一个补丁通吃"**：各分支的 `CMakeLists.txt`（源文件列表）与设置页枚举结构差异最大（官方 vs TClient 的 `CMakeLists.txt` 就差了 263 行），硬套只会满屏冲突；而**引擎接口与背景组件部分几乎逐行同源**，所以补丁覆盖大部分、剩余按补丁里每个 hunk 的函数上下文锚点手工落位最稳——落位完成后**把整棵树的 diff 固化成该基线的专用补丁**，下次安装就是干净一键。
+**为什么不做成"一个补丁通吃"**：各分支的源文件列表与设置页枚举结构差异最大，硬套只会满屏冲突；而**引擎接口与背景组件部分几乎逐行同源**，所以补丁覆盖大部分、剩余按补丁里每个 hunk 的函数上下文锚点手工落位最稳——落位完成后**把整棵树的 diff 固化成该基线的专用补丁**，下次安装就是干净一键。
 
 ```powershell
 apply.ps1 -Target C:\path\to\fork -CheckOnly   # 先看能不能干净套上（不改文件）
@@ -51,12 +51,11 @@ apply.ps1 -Target C:\path\to\fork -Revert      # 卸载
 | 上游 | **TClient 10.9.0**（`TaterClient/TClient`），其上游为 DDNet |
 | 基线提交 | `6b4118bf0` |
 | 改动规模 | 25 个文件，+2912 / −22 行 |
-| 改动性质 | 纯本地视觉：不改网络协议、预测、碰撞、tick，**不影响平衡** |
 
 > **已验证**：把基线提交的干净树取出后套上本补丁，25/25 个文件与开发树内容完全一致（`git archive` 取树 + `git apply` + 归一化换行后逐文件比对）。
 > 注意 Windows 上 `git apply` 受 `core.autocrlf` 影响会把结果写成 CRLF，这是正常现象；想保持 LF 就加 `git -c core.autocrlf=false apply`。
 
-## 安装（手工，不用安装器时）
+## 安装（不用安装器时）
 
 **Windows**
 
@@ -84,7 +83,7 @@ git apply -R patch/ddnet-background.patch        # 或
 git checkout -- . && git clean -fd src           # 彻底回到基线
 ```
 
-## 视频能力的前置条件（重要，别跳过）
+## 视频能力的前置条件
 
 `ddnet-libs` 子模块自带的 FFmpeg 是**录制专用构建（没有 demuxer）**，不换它**只能显示图片背景，打不开 mp4**。
 需要换成 BtbN 的 **FFmpeg 8.1 shared** 全量 DLL：`avcodec-62`、`avformat-62`、`avutil-60`、`swresample-6`、`swscale-9`（Windows 放 exe 同目录，其它平台对应动态库），`cmake/FindFFMPEG.cmake` 在补丁里已经改成这些名字。换完记得重新配置并**重编引擎**。
@@ -93,13 +92,17 @@ git checkout -- . && git clean -fd src           # 彻底回到基线
 
 ```
 ddnet-background-module/
-├─ patch/ddnet-background.patch   25 个文件的完整改动（git apply 一键套用）
+├─ patch/
+│   ├─ ddnet-background.patch     TClient 基线的完整改动（25 个文件）
+│   └─ ddnet-19.9.patch           DDNet 官方 19.9 基线的完整改动（17 个文件）
 ├─ files/                         5 个新增源文件（手工安装 / 换用其它版本控制时用）
 │   ├─ custom_background.{h,cpp}          背景组件（解码→上传→渲染，含 4 种显示方式）
 │   ├─ wallpaper_engine.{h,cpp}           Wallpaper Engine 壁纸扫描与解析
 │   └─ menus_settings_mycustom.cpp        Background 设置页
 ├─ apply.ps1 / apply.sh           安装器（支持 -CheckOnly / --revert）
-└─ module.json                    机器可读清单（基线、文件、配置项、引擎 API）
+├─ install.ps1                    一条命令全自动（拉源码→打补丁→装 FFmpeg→编译→组装）
+├─ pack-dmod.ps1                  打包出 dist/background-1.0.dmod
+└─ module.json                    机器可读清单（基线、双补丁映射、配置项、引擎 API）
 ```
 
 ## 配置项
@@ -123,8 +126,8 @@ ddnet-background-module/
 
 ## 引擎侧新增接口
 
-- `IGraphics::UpdateTextureRgba()` + `CCommandBuffer::CMD_TEXTURE_UPDATE`（纹理不再每帧销毁重建）
-- `IGraphics::TEXLOAD_NO_MIPMAPS`、`IGraphics::WrapRepeat()`
+- `IGraphics::UpdateTextureRgba()` + `CCommandBuffer::CMD_TEXTURE_UPDATE`（纹理不再每帧销毁重建），含 OpenGL2 / OpenGL3 后端实现
+- `IGraphics::WrapRepeat()`
 - `ui_page` 取值范围放宽到 1..17（原本 14/15 被 clamp，进不去设置页）
 - 纹理上行分带提交（命令环上限 `CMD_BUFFER_DATA_BUFFER_SIZE = 2MB`）
 
@@ -136,20 +139,20 @@ ddnet-background-module/
 
 # English
 
-This module turns the custom background feature (image / video dynamic background) into a **source module**: apply one patch to a clean TClient tree and you get the whole feature; skip it and you have the stock client.
+This is a **DDNet-based background module**: it turns the custom background feature (image / video dynamic background) into a **source module** — apply one patch to a clean DDNet / TClient tree and you get the whole feature; skip it and you have the stock client.
 
-> **It is not a runtime plugin and not a DLL.** DDNet/TClient have no plugin ABI, and the feature needs engine-level rendering support (a texture update command, `NO_MIPMAPS`, repeat wrapping) plus menu render hooks. A source patch with an installer is therefore the only honest packaging; "drop a DLL into data/ and it works" is not possible here.
+> **It is not a runtime plugin and not a DLL.** DDNet/TClient have no plugin ABI, and the feature needs engine-level rendering support (a texture update command, repeat wrapping) plus menu render hooks. A source patch with an installer is therefore the only honest packaging; "drop a DLL into data/ and it works" is not possible here.
 
-## Baseline
+## Baselines
 
 | | |
 |---|---|
-| Upstream | **TClient 10.9.0** (`TaterClient/TClient`), itself based on DDNet |
-| Base commit | `6b4118bf0` |
-| Size | 25 files, +2912 / −22 lines |
-| Scope | local and visual only: no changes to network protocol, prediction, collisions or ticks, so **balance is untouched** |
+| Upstream | **TClient 10.9.0** (`TaterClient/TClient`) and **DDNet 19.9**, each with its own patch |
+| Size | TClient: 25 files, +2912 / −22 lines — DDNet: 17 files, +2495 lines |
 
 ## Install
+
+Two ways, mirroring the Chinese section: **A** drop `dist/background-1.0.dmod` into the [ddnet-module-installer](https://github.com/agtwer/ddnet-module-installer) `mods\` folder (or drag it into the window) and install from there; **B** `git clone` this page and run `install.ps1`. The manual route:
 
 ```powershell
 # Windows
@@ -175,7 +178,7 @@ git apply -R patch/ddnet-background.patch
 # or completely: git checkout -- . && git clean -fd src
 ```
 
-## Prerequisite for video (do not skip)
+## Prerequisite for video
 
 The FFmpeg shipped inside the `ddnet-libs` submodule is a **recorder-only build without demuxers**: without replacing it, **images work but video files cannot be opened**. Use the BtbN **FFmpeg 8.1 shared** build (`avcodec-62`, `avformat-62`, `avutil-60`, `swresample-6`, `swscale-9`); `cmake/FindFFMPEG.cmake` is already patched to those names. Reconfigure and rebuild the engine afterwards.
 
