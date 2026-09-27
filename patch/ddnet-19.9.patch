@@ -1,84 +1,23 @@
-﻿diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 3695ae7..67b80dd 100644
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3695ae7..7d327ad 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -2497,6 +2497,8 @@ if(CLIENT)
-     components/controls.h
-     components/countryflags.cpp
-     components/countryflags.h
-+    components/custom_background.cpp
-+    components/custom_background.h
-     components/damageind.cpp
-     components/damageind.h
-     components/debughud.cpp
-@@ -2545,6 +2547,7 @@ if(CLIENT)
+@@ -2545,6 +2545,9 @@ if(CLIENT)
      components/menus_settings_assets.cpp
      components/menus_settings_controls.cpp
      components/menus_settings_controls.h
 +    components/menus_settings_mycustom.cpp
++    components/custom_background.cpp
++    components/wallpaper_engine.cpp
      components/menus_start.cpp
      components/menus_start.h
      components/motd.cpp
-@@ -2575,6 +2578,8 @@ if(CLIENT)
-     components/touch_controls.h
-     components/voting.cpp
-     components/voting.h
-+    components/wallpaper_engine.cpp
-+    components/wallpaper_engine.h
-     gameclient.cpp
-     gameclient.h
-     laser_data.cpp
-diff --git a/cmake/FindFFMPEG.cmake b/cmake/FindFFMPEG.cmake
-index dfcd66f..3791d06 100644
---- a/cmake/FindFFMPEG.cmake
-+++ b/cmake/FindFFMPEG.cmake
-@@ -150,11 +150,11 @@ set(FFMPEG_COPY_FILES)
- if(FFMPEG_BUNDLED)
-   if(TARGET_OS STREQUAL "windows")
-     set(FFMPEG_COPY_FILES
--      "${EXTRA_FFMPEG_LIBDIR}/avcodec-61.dll"
--      "${EXTRA_FFMPEG_LIBDIR}/avformat-61.dll"
--      "${EXTRA_FFMPEG_LIBDIR}/avutil-59.dll"
--      "${EXTRA_FFMPEG_LIBDIR}/swresample-5.dll"
--      "${EXTRA_FFMPEG_LIBDIR}/swscale-8.dll"
-+      "${EXTRA_FFMPEG_LIBDIR}/avcodec-62.dll"
-+      "${EXTRA_FFMPEG_LIBDIR}/avformat-62.dll"
-+      "${EXTRA_FFMPEG_LIBDIR}/avutil-60.dll"
-+      "${EXTRA_FFMPEG_LIBDIR}/swresample-6.dll"
-+      "${EXTRA_FFMPEG_LIBDIR}/swscale-9.dll"
-     )
-   elseif(TARGET_OS STREQUAL "mac")
-     set(FFMPEG_COPY_FILES
-diff --git a/src/engine/client/backend/null/backend_null.cpp b/src/engine/client/backend/null/backend_null.cpp
-index 1e2f27d..20e6408 100644
---- a/src/engine/client/backend/null/backend_null.cpp
-+++ b/src/engine/client/backend/null/backend_null.cpp
-@@ -16,6 +16,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_Null::RunCommand(const CCommand
- 	case CCommandBuffer::CMD_TEXTURE_CREATE:
- 		Cmd_Texture_Create(static_cast<const CCommandBuffer::SCommand_Texture_Create *>(pBaseCommand));
- 		break;
-+	case CCommandBuffer::CMD_TEXTURE_UPDATE:
-+		// the null backend stores no pixel data, so an in-place update is a no-op
-+		break;
- 	case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
- 		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
- 		break;
 diff --git a/src/engine/client/backend/opengl/backend_opengl.cpp b/src/engine/client/backend/opengl/backend_opengl.cpp
-index 0f8e5c5..7974842 100644
+index 0f8e5c5..8158800 100644
 --- a/src/engine/client/backend/opengl/backend_opengl.cpp
 +++ b/src/engine/client/backend/opengl/backend_opengl.cpp
-@@ -715,8 +715,7 @@ void CCommandProcessorFragment_OpenGL::DestroyTexture(int Slot)
- 	m_vTextures[Slot].m_LastWrapMode = EWrapMode::REPEAT;
- }
- 
--void CCommandProcessorFragment_OpenGL::Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand)
--{
-+void CCommandProcessorFragment_OpenGL::Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand){
- 	DestroyTexture(pCommand->m_Slot);
- }
- 
-@@ -934,6 +933,11 @@ void CCommandProcessorFragment_OpenGL::Cmd_TextTexture_Update(const CCommandBuff
- 	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_ALPHA, pCommand->m_pData);
+@@ -940,6 +940,11 @@ void CCommandProcessorFragment_OpenGL::Cmd_TextTextures_Destroy(const CCommandBu
+ 	DestroyTexture(pCommand->m_SlotOutline);
  }
  
 +void CCommandProcessorFragment_OpenGL::Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand)
@@ -86,37 +25,39 @@ index 0f8e5c5..7974842 100644
 +	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RGBA, pCommand->m_pData);
 +}
 +
- void CCommandProcessorFragment_OpenGL::Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand)
+ void CCommandProcessorFragment_OpenGL::Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand)
  {
- 	DestroyTexture(pCommand->m_Slot);
-@@ -1075,6 +1079,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_OpenGL::RunCommand(const CComma
+ 	TextureCreate(pCommand->m_Slot, pCommand->m_Width, pCommand->m_Height, GL_ALPHA, GL_ALPHA, TextureFlag::NO_MIPMAPS, pCommand->m_pTextData);
+@@ -1075,7 +1080,10 @@ ERunCommandReturnTypes CCommandProcessorFragment_OpenGL::RunCommand(const CComma
  	case CCommandBuffer::CMD_TEXTURE_DESTROY:
  		Cmd_Texture_Destroy(static_cast<const CCommandBuffer::SCommand_Texture_Destroy *>(pBaseCommand));
  		break;
+-	case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
 +	case CCommandBuffer::CMD_TEXTURE_UPDATE:
 +		Cmd_Texture_Update(static_cast<const CCommandBuffer::SCommand_Texture_Update *>(pBaseCommand));
 +		break;
- 	case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
++case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
  		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
  		break;
+ 	case CCommandBuffer::CMD_TEXT_TEXTURES_DESTROY:
 diff --git a/src/engine/client/backend/opengl/backend_opengl.h b/src/engine/client/backend/opengl/backend_opengl.h
-index 7c4b85c..b78eb12 100644
+index 7c4b85c..b05ed8e 100644
 --- a/src/engine/client/backend/opengl/backend_opengl.h
 +++ b/src/engine/client/backend/opengl/backend_opengl.h
 @@ -91,6 +91,7 @@ protected:
  	virtual void Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand);
  	virtual void Cmd_Texture_Create(const CCommandBuffer::SCommand_Texture_Create *pCommand);
  	virtual void Cmd_TextTexture_Update(const CCommandBuffer::SCommand_TextTexture_Update *pCommand);
-+	virtual void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand);
++	void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand);
  	virtual void Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand);
  	virtual void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand);
  	virtual void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand);
 diff --git a/src/engine/client/backend/opengl/backend_opengl3.cpp b/src/engine/client/backend/opengl/backend_opengl3.cpp
-index 320f069..5593d22 100644
+index 320f069..b47ffc7 100644
 --- a/src/engine/client/backend/opengl/backend_opengl3.cpp
 +++ b/src/engine/client/backend/opengl/backend_opengl3.cpp
-@@ -707,6 +707,11 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTexture_Update(const CCommandB
- 	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RED, pCommand->m_pData);
+@@ -713,6 +713,11 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTextures_Destroy(const CComman
+ 	DestroyTexture(pCommand->m_SlotOutline);
  }
  
 +void CCommandProcessorFragment_OpenGL3_3::Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand)
@@ -124,52 +65,34 @@ index 320f069..5593d22 100644
 +	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RGBA, pCommand->m_pData);
 +}
 +
- void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand)
+ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand)
  {
- 	DestroyTexture(pCommand->m_Slot);
+ 	TextureCreate(pCommand->m_Slot, pCommand->m_Width, pCommand->m_Height, GL_RED, GL_RED, TextureFlag::NO_MIPMAPS, pCommand->m_pTextData);
 diff --git a/src/engine/client/backend/opengl/backend_opengl3.h b/src/engine/client/backend/opengl/backend_opengl3.h
-index df044a3..c47c726 100644
+index df044a3..07cb535 100644
 --- a/src/engine/client/backend/opengl/backend_opengl3.h
 +++ b/src/engine/client/backend/opengl/backend_opengl3.h
-@@ -87,6 +87,7 @@ protected:
- 	void Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand) override;
+@@ -88,6 +88,7 @@ protected:
  	void Cmd_Texture_Create(const CCommandBuffer::SCommand_Texture_Create *pCommand) override;
  	void Cmd_TextTexture_Update(const CCommandBuffer::SCommand_TextTexture_Update *pCommand) override;
-+	void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand) override;
  	void Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand) override;
++	void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand);
  	void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand) override;
  	void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand) override;
+ 	void Cmd_Render(const CCommandBuffer::SCommand_Render *pCommand) override;
 diff --git a/src/engine/client/graphics_threaded.cpp b/src/engine/client/graphics_threaded.cpp
-index fdc8cd0..f0142b0 100644
+index fdc8cd0..b2b8154 100644
 --- a/src/engine/client/graphics_threaded.cpp
 +++ b/src/engine/client/graphics_threaded.cpp
-@@ -174,6 +174,13 @@ void CGraphics_Threaded::WrapClamp()
+@@ -174,6 +174,52 @@ void CGraphics_Threaded::WrapClamp()
  	m_State.m_WrapMode = EWrapMode::CLAMP;
  }
  
 +void CGraphics_Threaded::WrapRepeat()
 +{
-+	// The default ("normal") wrap mode already is REPEAT, so tiling a texture
-+	// only needs an explicit setter to make the intent readable at call sites.
 +	m_State.m_WrapMode = EWrapMode::REPEAT;
 +}
 +
- uint64_t CGraphics_Threaded::TextureMemoryUsage() const
- {
- 	return m_pBackend->TextureMemoryUsage();
-@@ -400,6 +407,8 @@ static CCommandBuffer::SCommand_Texture_Create LoadTextureCreateCommand(int Text
- 		Cmd.m_Flags |= TextureFlag::TO_3D_TEXTURE;
- 	if((Flags & IGraphics::TEXLOAD_NO_2D_TEXTURE) != 0)
- 		Cmd.m_Flags |= TextureFlag::NO_2D_TEXTURE;
-+	if((Flags & IGraphics::TEXLOAD_NO_MIPMAPS) != 0)
-+		Cmd.m_Flags |= TextureFlag::NO_MIPMAPS;
- 
- 	return Cmd;
- }
-@@ -530,6 +539,47 @@ bool CGraphics_Threaded::UpdateTextTexture(CTextureHandle TextureId, int x, int
- 	return true;
- }
- 
 +bool CGraphics_Threaded::UpdateTextureRgba(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, const uint8_t *pData)
 +{
 +	if(!TextureId.IsValid() || pData == nullptr || Width == 0 || Height == 0)
@@ -211,29 +134,35 @@ index fdc8cd0..f0142b0 100644
 +	return true;
 +}
 +
- static SWarning FormatPngliteIncompatibilityWarning(int PngliteIncompatible, const char *pContextName)
+ uint64_t CGraphics_Threaded::TextureMemoryUsage() const
  {
- 	SWarning Warning;
+ 	return m_pBackend->TextureMemoryUsage();
+@@ -400,6 +446,8 @@ static CCommandBuffer::SCommand_Texture_Create LoadTextureCreateCommand(int Text
+ 		Cmd.m_Flags |= TextureFlag::TO_3D_TEXTURE;
+ 	if((Flags & IGraphics::TEXLOAD_NO_2D_TEXTURE) != 0)
+ 		Cmd.m_Flags |= TextureFlag::NO_2D_TEXTURE;
++	if((Flags & IGraphics::TEXLOAD_NO_MIPMAPS) != 0)
++		Cmd.m_Flags |= TextureFlag::NO_MIPMAPS;
+ 
+ 	return Cmd;
+ }
 diff --git a/src/engine/client/graphics_threaded.h b/src/engine/client/graphics_threaded.h
-index a83211d..468db05 100644
+index a83211d..d61fb12 100644
 --- a/src/engine/client/graphics_threaded.h
 +++ b/src/engine/client/graphics_threaded.h
-@@ -123,6 +123,7 @@ public:
- 		// texture commands
- 		CMD_TEXTURE_CREATE,
- 		CMD_TEXTURE_DESTROY,
-+		CMD_TEXTURE_UPDATE,
- 		CMD_TEXT_TEXTURES_CREATE,
+@@ -127,6 +127,8 @@ public:
  		CMD_TEXT_TEXTURES_DESTROY,
  		CMD_TEXT_TEXTURE_UPDATE,
-@@ -570,6 +571,24 @@ public:
- 		uint8_t *m_pData; // will be freed by the command processor
+ 
++		CMD_TEXTURE_UPDATE,
++
+ 		// rendering
+ 		CMD_CLEAR,
+ 		CMD_RENDER,
+@@ -204,6 +206,20 @@ public:
+ 		int m_ClipH;
  	};
  
-+	// In-place update of a general RGBA texture. Without this, updating an
-+	// animated texture means destroying and re-creating it every frame, which
-+	// costs a full texture allocation plus a GPU-side delete of a texture that
-+	// may still be in use by the previous frame's draw calls.
 +	struct SCommand_Texture_Update : public SCommand
 +	{
 +		SCommand_Texture_Update() :
@@ -248,10 +177,10 @@ index a83211d..468db05 100644
 +		uint8_t *m_pData;
 +	};
 +
- 	struct SCommand_WindowCreateNtf : public CCommandBuffer::SCommand
+ 	struct SCommand_Clear : public SCommand
  	{
- 		SCommand_WindowCreateNtf() :
-@@ -908,6 +927,7 @@ public:
+ 		SCommand_Clear() :
+@@ -908,6 +924,7 @@ public:
  
  	void WrapNormal() override;
  	void WrapClamp() override;
@@ -259,7 +188,7 @@ index a83211d..468db05 100644
  
  	uint64_t TextureMemoryUsage() const override;
  	uint64_t BufferMemoryUsage() const override;
-@@ -937,6 +957,7 @@ public:
+@@ -937,6 +954,7 @@ public:
  	bool LoadTextTextures(size_t Width, size_t Height, CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture, uint8_t *pTextData, uint8_t *pTextOutlineData) override;
  	bool UnloadTextTextures(CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture) override;
  	bool UpdateTextTexture(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, uint8_t *pData, bool IsMovedPointer) override;
@@ -268,44 +197,35 @@ index a83211d..468db05 100644
  	CTextureHandle LoadSpriteTexture(const CImageInfo &FromImageInfo, const struct CDataSprite *pSprite) override;
  
 diff --git a/src/engine/graphics.h b/src/engine/graphics.h
-index e5c7dd5..c08aa33 100644
+index e5c7dd5..300d2bd 100644
 --- a/src/engine/graphics.h
 +++ b/src/engine/graphics.h
-@@ -198,6 +198,10 @@ public:
+@@ -198,6 +198,7 @@ public:
  		TEXLOAD_TO_3D_TEXTURE = 1 << 0,
  		TEXLOAD_TO_2D_ARRAY_TEXTURE = 1 << 1,
  		TEXLOAD_NO_2D_TEXTURE = 1 << 2,
-+		// Do not build a mipmap chain for this texture. Without it the driver
-+		// regenerates the mipmaps on every write to the texture, which makes
-+		// frequently updated (video) textures very expensive at large sizes.
-+		TEXLOAD_NO_MIPMAPS = 1 << 3,
++	TEXLOAD_NO_MIPMAPS = 1 << 3,
  	};
  
  	class CTextureHandle
-@@ -273,6 +277,9 @@ public:
+@@ -273,6 +274,7 @@ public:
  	virtual void BlendAdditive() = 0;
  	virtual void WrapNormal() = 0;
  	virtual void WrapClamp() = 0;
-+	// Repeat addressing: needed to tile a texture (draw the same image several
-+	// times). Restored with WrapNormal()/WrapClamp().
 +	virtual void WrapRepeat() = 0;
  
  	virtual uint64_t TextureMemoryUsage() const = 0;
  	virtual uint64_t BufferMemoryUsage() const = 0;
-@@ -291,6 +298,11 @@ public:
- 	virtual CTextureHandle LoadTextureRaw(const CImageInfo &Image, int Flags, const char *pTexName = nullptr) = 0;
- 	virtual CTextureHandle LoadTextureRawMove(CImageInfo &Image, int Flags, const char *pTexName = nullptr) = 0;
- 	virtual CTextureHandle LoadTexture(const char *pFilename, int StorageType, int Flags = 0) = 0;
-+	// In-place update of a general RGBA texture, so animated textures do not have
-+	// to be destroyed and re-created every frame. pData holds Height rows of
-+	// Width*4 RGBA bytes and is copied internally (the caller keeps ownership).
-+	// Width/Height must match the region being replaced; x/y select the offset.
+@@ -298,6 +300,7 @@ public:
+ 	virtual bool LoadTextTextures(size_t Width, size_t Height, CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture, uint8_t *pTextData, uint8_t *pTextOutlineData) = 0;
+ 	virtual bool UnloadTextTextures(CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture) = 0;
+ 	virtual bool UpdateTextTexture(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, uint8_t *pData, bool IsMovedPointer) = 0;
 +	virtual bool UpdateTextureRgba(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, const uint8_t *pData) = 0;
- 	virtual void TextureSet(CTextureHandle Texture) = 0;
- 	void TextureClear() { TextureSet(CTextureHandle()); }
+ 
+ 	virtual CTextureHandle LoadSpriteTexture(const CImageInfo &FromImageInfo, const struct CDataSprite *pSprite) = 0;
  
 diff --git a/src/engine/shared/config_variables.h b/src/engine/shared/config_variables.h
-index b091e83..9de34d3 100644
+index b091e83..2cdb6cf 100644
 --- a/src/engine/shared/config_variables.h
 +++ b/src/engine/shared/config_variables.h
 @@ -221,7 +221,20 @@ MACRO_CONFIG_STR(ClDummy7SkinEyes, dummy7_skin_eyes, protocol7::MAX_SKIN_ARRAY_S
@@ -314,87 +234,28 @@ index b091e83..9de34d3 100644
  
 -MACRO_CONFIG_INT(UiPage, ui_page, 6, 6, 13, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface page")
 +MACRO_CONFIG_INT(UiPage, ui_page, 6, 1, 17, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface page")
-+MACRO_CONFIG_INT(McMenuBackground, mc_menu_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background (png/mp4) on the main menu")
-+MACRO_CONFIG_INT(McGameBackground, mc_game_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background (png/mp4) on the entity layer in game")
-+MACRO_CONFIG_STR(McBackgroundPath, mc_background_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Path to the custom background file (png/mp4, relative to the save folder or absolute)")
-+MACRO_CONFIG_INT(McBackgroundVideoFps, mc_background_video_fps, 30, 0, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Max frame rate of the custom background video, 0 = source frame rate (visual only, lowers decode cost)")
-+MACRO_CONFIG_STR(McBackgroundFit, mc_background_fit, 32, "auto", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Background fit resolution: auto, a screen size, or a fixed WxH like 1920x1440 (background crop/decode box only; never changes the game resolution)")
-+MACRO_CONFIG_INT(McBackgroundDiag, mc_background_diag, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Append background video diagnostics (decode rate, gate) to save/mcbg_diag.txt every 10s, 0 = off")
-+MACRO_CONFIG_INT(McBackgroundThreads, mc_background_threads, 4, 0, 64, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Decoder threads for the background video, 0 = auto (one per logical core); 4 measured fastest for 2K sources")
-+MACRO_CONFIG_INT(McBackgroundSource, mc_background_source, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Background source: 0 = your own image/video file, 1 = a Wallpaper Engine wallpaper")
-+MACRO_CONFIG_STR(McWePath, mc_we_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Selected Wallpaper Engine wallpaper (workshop id or folder path)")
-+MACRO_CONFIG_INT(McUiPanelAlpha, mc_ui_panel_alpha, 25, 0, 25, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Opacity of the black panel ('shadow') behind menu options/rows and section boxes: 0..25 where 25 = the built-in default and 0 = no shadow at all")
++MACRO_CONFIG_INT(McMenuBackground, mc_menu_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background on the main menu")
++MACRO_CONFIG_INT(McGameBackground, mc_game_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background on the entity layer in game")
++MACRO_CONFIG_STR(McBackgroundPath, mc_background_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Path to the custom background file")
++MACRO_CONFIG_INT(McBackgroundVideoFps, mc_background_video_fps, 30, 0, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Max frame rate of the background video, 0 = source")
++MACRO_CONFIG_STR(McBackgroundFit, mc_background_fit, 32, "auto", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Background fit: auto, a screen size, or a fixed WxH")
++MACRO_CONFIG_INT(McBackgroundDiag, mc_background_diag, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Append background diagnostics to save/mcbg_diag.txt, 0 = off")
++MACRO_CONFIG_INT(McBackgroundThreads, mc_background_threads, 4, 0, 64, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Decoder threads, 0 = auto")
++MACRO_CONFIG_INT(McBackgroundSource, mc_background_source, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 = own file, 1 = Wallpaper Engine")
++MACRO_CONFIG_STR(McWePath, mc_we_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Selected Wallpaper Engine wallpaper")
++MACRO_CONFIG_INT(McUiPanelAlpha, mc_ui_panel_alpha, 25, 0, 25, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Opacity of the black panel: 0..25, 25 = built-in default")
 +MACRO_CONFIG_INT(McMenuTitle, mc_menu_title, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the big title image on the main menu")
-+MACRO_CONFIG_INT(McBackgroundMode, mc_background_mode, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "How the background fills the screen (never letterboxed): 0 = crop top/bottom (keep the whole width), 1 = crop left/right (keep the whole height), 2 = stretch, 3 = tile")
-+MACRO_CONFIG_INT(McBackgroundVideoRes, mc_background_video_res, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Video decode resolution for the background: 0 = original source size (no downscale), 1 = 2160p, 2 = 1440p, 3 = 1080p, 4 = 720p")
++MACRO_CONFIG_INT(McBackgroundMode, mc_background_mode, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 = crop top/bottom, 1 = crop left/right, 2 = stretch, 3 = tile")
++MACRO_CONFIG_INT(McBackgroundVideoRes, mc_background_video_res, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 = source, 1 = 2160p, 2 = 1440p, 3 = 1080p, 4 = 720p")
  MACRO_CONFIG_INT(UiSettingsPage, ui_settings_page, 0, 0, 9, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface settings page")
  MACRO_CONFIG_INT(UiToolboxPage, ui_toolbox_page, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Toolbox page")
  MACRO_CONFIG_STR(UiServerAddress, ui_server_address, 1024, "localhost:8303", CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_INSENSITIVE, "Interface server address")
-diff --git a/src/game/client/components/background.cpp b/src/game/client/components/background.cpp
-index 21a0306..478e921 100644
---- a/src/game/client/components/background.cpp
-+++ b/src/game/client/components/background.cpp
-@@ -34,6 +34,7 @@ void CBackground::OnInit()
- 	m_pMap = m_pBackgroundMap.get();
- 
- 	m_pImages->OnInterfacesInit(GameClient());
-+	m_MediaBackground.Init(Graphics(), Storage());
- 	if(g_Config.m_ClBackgroundEntities[0] != '\0' && str_comp(g_Config.m_ClBackgroundEntities, CURRENT_MAP))
- 		LoadBackground();
- }
-@@ -93,10 +94,22 @@ void CBackground::OnMapLoad()
- 
- void CBackground::OnRender()
- {
--	if(!m_Loaded)
-+	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
-+	{
-+		m_MediaBackground.Unload();
- 		return;
-+	}
- 
--	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
-+	// My custom: local custom background (png/mp4) behind the entity layers, visual only.
-+	// Update() (video decode) only runs while the background is actually visible.
-+	m_MediaBackground.SyncFromConfig(g_Config.m_McGameBackground, g_Config.m_McBackgroundPath);
-+	if(g_Config.m_McGameBackground && g_Config.m_ClOverlayEntities > 0)
-+	{
-+		m_MediaBackground.Update();
-+		m_MediaBackground.Render();
-+	}
-+
-+	if(!m_Loaded)
- 		return;
- 
- 	if(g_Config.m_ClOverlayEntities != 100)
-diff --git a/src/game/client/components/background.h b/src/game/client/components/background.h
-index 0fd20e1..f584037 100644
---- a/src/game/client/components/background.h
-+++ b/src/game/client/components/background.h
-@@ -3,6 +3,7 @@
- 
- #include <engine/map.h>
- 
-+#include <game/client/components/custom_background.h>
- #include <game/client/components/maplayers.h>
- 
- #include <cstdint>
-@@ -25,6 +26,9 @@ protected:
- 	CLayers *m_pBackgroundLayers;
- 	CMapImages *m_pBackgroundImages;
- 
-+	// My custom: local custom background (png/mp4) for the entity layer, visual only
-+	CCustomMediaBackground m_MediaBackground;
-+
- public:
- 	CBackground(ERenderType MapType = ERenderType::RENDERTYPE_BACKGROUND_FORCE, bool OnlineOnly = true);
- 	~CBackground() override;
 diff --git a/src/game/client/components/custom_background.cpp b/src/game/client/components/custom_background.cpp
 new file mode 100644
-index 0000000..da99f3b
+index 0000000..899126a
 --- /dev/null
 +++ b/src/game/client/components/custom_background.cpp
-@@ -0,0 +1,1095 @@
+@@ -0,0 +1,1094 @@
 +#include "custom_background.h"
 +
 +#include <base/fs.h>
@@ -1329,8 +1190,7 @@ index 0000000..da99f3b
 +	if(!m_IsLoaded || m_pGraphics == nullptr || !m_Texture.IsValid())
 +		return false;
 +
-+	// DDNet 19.9 has no CScreenRect/GetScreen() struct-returning overload; the
-+	// four-float GetScreen() is the same viewport data (HiDPI aware).
++	// DDNet 19.9 has no CScreenRect/struct GetScreen(); the four-float overload returns the same viewport.
 +	float ScreenTLX = 0.0f, ScreenTLY = 0.0f, ScreenBRX = 0.0f, ScreenBRY = 0.0f;
 +	m_pGraphics->GetScreen(&ScreenTLX, &ScreenTLY, &ScreenBRX, &ScreenBRY);
 +	const float ScreenW = ScreenBRX - ScreenTLX;
@@ -1635,22 +1495,19 @@ index 0000000..5281843
 +
 +#endif
 diff --git a/src/game/client/components/menus.cpp b/src/game/client/components/menus.cpp
-index 6cd6645..7154431 100644
+index 6cd6645..d5fe20d 100644
 --- a/src/game/client/components/menus.cpp
 +++ b/src/game/client/components/menus.cpp
-@@ -130,6 +130,11 @@ int CMenus::DoButton_Menu(CButtonContainer *pButtonContainer, const char *pText,
+@@ -130,6 +130,8 @@ int CMenus::DoButton_Menu(CButtonContainer *pButtonContainer, const char *pText,
  		Color = ColorRGBA(0.6f, 0.6f, 0.6f, 0.5f);
  	Color.a *= Ui()->ButtonColorMul(pButtonContainer);
  
-+	// Global opacity of the black panel behind rows/options (mc_ui_panel_alpha,
-+	// 0..25). 25 is the built-in default these panels are authored with, so the
-+	// factor is exactly 1.0 and nothing changes unless the user adjusts it.
 +	Color.a *= (float)std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 25.0f;
 +
  	pRect->Draw(Color, Corners, Rounding);
  
  	if(pImageName)
-@@ -768,7 +773,7 @@ void CMenus::RenderLoading(const char *pCaption, const char *pContent, int Incre
+@@ -768,7 +770,7 @@ void CMenus::RenderLoading(const char *pCaption, const char *pContent, int Incre
  		// the menu background is not loaded yet.
  		return;
  	}
@@ -1659,52 +1516,15 @@ index 6cd6645..7154431 100644
  	{
  		RenderBackground();
  	}
-@@ -853,6 +858,8 @@ void CMenus::OnInterfacesInit(CGameClient *pClient)
+@@ -853,6 +855,7 @@ void CMenus::OnInterfacesInit(CGameClient *pClient)
  
  void CMenus::OnInit()
  {
 +	m_CustomBackground.Init(Graphics(), Storage());
-+
  	if(g_Config.m_ClShowWelcome)
  	{
  		m_Popup = POPUP_LANGUAGE;
-@@ -1007,6 +1014,35 @@ bool CMenus::CanDisplayWarning() const
- 	return m_Popup == POPUP_NONE;
- }
- 
-+void CMenus::RenderHideGuiButton(const CUIRect &Screen)
-+{
-+	// Small square in the free part of the start menu's bottom-right corner: the
-+	// version label (bottom) and the console button end 50px above the edge and
-+	// 50px further left, so this overlaps neither. Same Font Awesome icon family
-+	// as the rest of the menu (FontIcon::EYE / EYE_SLASH), so it blends into the
-+	// game's own style.
-+	constexpr float Size = 30.0f;
-+	constexpr float MarginRight = 12.0f;
-+	constexpr float MarginBottom = 50.0f;
-+
-+	CUIRect Button;
-+	Button.x = Screen.x + Screen.w - Size - MarginRight;
-+	Button.y = Screen.y + Screen.h - Size - MarginBottom;
-+	Button.w = Size;
-+	Button.h = Size;
-+
-+	static CButtonContainer s_HideGuiButton;
-+	// eye-slash = "hide the interface", eye = "bring it back"
-+	const char *pIcon = m_HideGui ? FontIcon::EYE : FontIcon::EYE_SLASH;
-+	// slightly stronger panel while hidden so the only remaining control stays
-+	// findable against a bright background
-+	const float PanelAlpha = m_HideGui ? 0.45f : 0.25f;
-+	if(Ui()->DoButton_FontIcon(&s_HideGuiButton, pIcon, 0, &Button, BUTTONFLAG_LEFT, IGraphics::CORNER_ALL, true, ColorRGBA(0.0f, 0.0f, 0.0f, PanelAlpha)))
-+	{
-+		m_HideGui = !m_HideGui;
-+	}
-+}
-+
- void CMenus::Render()
- {
- 	Ui()->MapScreen();
-@@ -1068,7 +1104,7 @@ void CMenus::Render()
+@@ -1068,7 +1071,7 @@ void CMenus::Render()
  	}
  	else
  	{
@@ -1713,126 +1533,38 @@ index 6cd6645..7154431 100644
  		{
  			RenderBackground();
  		}
-@@ -1083,6 +1119,32 @@ void CMenus::Render()
- 		Screen.Margin(10.0f, &Screen);
- 	}
- 
-+	// "Hide all GUI" / immersive view (Blue Archive style home button). Available
-+	// on the start menu only: that is the "home page" showing the background, and
-+	// it is also the only menu screen whose bottom-right corner is free (on the
-+	// settings screen the category list owns that corner). Restricted to offline
-+	// with no popup, so a hidden interface can never hide a loading, connecting
-+	// or warning dialog.
-+	const bool HideGuiAvailable = ClientState == IClient::STATE_OFFLINE && m_Popup == POPUP_NONE && m_ShowStart;
-+	if(!HideGuiAvailable)
-+		m_HideGui = false;
-+	if(m_HideGui)
-+	{
-+		// Every other menu element is skipped, which also means no invisible
-+		// button stays clickable - only the toggle is registered with the UI.
-+		// Escape is consumed here as a second way out, so it restores the
-+		// interface instead of closing/deactivating the menu.
-+		if(Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE))
-+		{
-+			m_HideGui = false;
-+		}
-+		else
-+		{
-+			RenderHideGuiButton(Screen);
-+			return;
-+		}
-+	}
-+
- 	switch(ClientState)
- 	{
- 	case IClient::STATE_QUITTING:
-@@ -1201,6 +1263,10 @@ void CMenus::Render()
- 		break;
- 	}
- 
-+	// Immersive view toggle, drawn on top of whichever menu page is showing.
-+	if(HideGuiAvailable)
-+		RenderHideGuiButton(Screen);
-+
- 	Ui()->RenderPopupMenus();
- 
- 	// Prevent UI elements from being hovered while a key reader is active
-@@ -2391,6 +2457,9 @@ void CMenus::SetActive(bool Active)
- 		Ui()->SetActiveItem(nullptr);
- 	}
- 	m_MenuActive = Active;
-+	// never leave the interface hidden once the menu is closed
-+	if(!Active)
-+		m_HideGui = false;
- 	if(!m_MenuActive)
- 	{
- 		if(m_NeedSendinfo)
-@@ -2547,9 +2616,18 @@ void CMenus::UpdateColors()
- {
- 	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
- 
--	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f);
--	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);
--	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f);
-+	// Global opacity of the black menu panels (the "shadows" the options sit on).
-+	// The tab buttons and the large box behind the settings content are all built
-+	// from the colours below, so scaling them here covers every panel of the menu
-+	// chrome at once; the section boxes and option rows drawn by this file's own
-+	// pages apply mc_ui_panel_alpha as well. 25 is the built-in default, so the
-+	// factor is exactly 1.0 and nothing changes unless the user adjusts it.
-+	// This runs every frame (see the caller), so the setting applies live.
-+	const float PanelAlpha = std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 25.0f;
-+
-+	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f * PanelAlpha);
-+	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f * PanelAlpha);
-+	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f * PanelAlpha);
- 
- 	const float ColorIngameScaleI = 0.5f;
- 	const float ColorIngameScaleA = 0.2f;
 diff --git a/src/game/client/components/menus.h b/src/game/client/components/menus.h
-index 74a80fd..077fd72 100644
+index 74a80fd..57dcdf2 100644
 --- a/src/game/client/components/menus.h
 +++ b/src/game/client/components/menus.h
-@@ -16,7 +16,9 @@
+@@ -16,6 +16,8 @@
  
  #include <game/client/component.h>
  #include <game/client/components/community_icons.h>
 +#include <game/client/components/custom_background.h>
- #include <game/client/components/mapimages.h>
 +#include <game/client/components/wallpaper_engine.h>
+ #include <game/client/components/mapimages.h>
  #include <game/client/components/menus_ingame_touch_controls.h>
  #include <game/client/components/menus_settings_controls.h>
- #include <game/client/components/menus_start.h>
 @@ -685,6 +687,7 @@ public:
  		SETTINGS_SOUND,
  		SETTINGS_DDNET,
  		SETTINGS_ASSETS,
-+		SETTINGS_MYCUSTOM, // module pages (Background etc.)
++		SETTINGS_MYCUSTOM, // module pages
  
  		SETTINGS_LENGTH,
  	};
-@@ -825,6 +828,21 @@ private:
+@@ -824,6 +827,10 @@ private:
+ 	CMenusSettingsControls m_MenusSettingsControls;
  	friend CMenusSettingsControls;
  	CMenusStart m_MenusStart;
- 
-+	// My custom: local custom background (png/mp4), visual only
 +	CCustomMediaBackground m_CustomBackground;
++	CWallpaperEngine m_WallpaperEngine;
 +	bool RenderCustomMenuBackground();
 +	void RenderSettingsMyCustom(CUIRect MainView);
-+
-+	// Immersive view (Blue Archive style home button): hides every bit of menu
-+	// GUI except the toggle button itself, so only the background is left.
-+	// Runtime-only on purpose - it is never saved, so a fresh start always shows
-+	// the interface and the player can never end up stuck without it.
-+	bool m_HideGui = false;
-+	void RenderHideGuiButton(const CUIRect &Screen);
-+
-+	// Background: discover and select a Wallpaper Engine wallpaper.
-+	CWallpaperEngine m_WallpaperEngine;
-+
+ 
  	static int GhostlistFetchCallback(const CFsFileInfo *pInfo, int IsDir, int StorageType, void *pUser);
  
- 	// found in menus_ingame.cpp
 diff --git a/src/game/client/components/menus_settings.cpp b/src/game/client/components/menus_settings.cpp
 index a0c4fa2..773db62 100644
 --- a/src/game/client/components/menus_settings.cpp
@@ -1861,7 +1593,7 @@ index a0c4fa2..773db62 100644
  		dbg_assert_failed("ui_settings_page invalid");
 diff --git a/src/game/client/components/menus_settings_mycustom.cpp b/src/game/client/components/menus_settings_mycustom.cpp
 new file mode 100644
-index 0000000..b8c071f
+index 0000000..36162bb
 --- /dev/null
 +++ b/src/game/client/components/menus_settings_mycustom.cpp
 @@ -0,0 +1,617 @@
@@ -2018,7 +1750,7 @@ index 0000000..b8c071f
 +		const char *pId;
 +		const char *pName;
 +	} s_aModuleTabs[] = {
-+		{"background", "Background"},
++		{"background", "背景"},
 +	};
 +	constexpr int ModuleTabCount = (int)(sizeof(s_aModuleTabs) / sizeof(s_aModuleTabs[0]));
 +	static int s_ActiveModuleTab = 0;
@@ -2090,7 +1822,7 @@ index 0000000..b8c071f
 +		Content.HSplitTop(Margin, nullptr, &Content);
 +		CUIRect Headline;
 +		Content.HSplitTop(HeadlineHeight, &Headline, &Content);
-+		Ui()->DoLabel(&Headline, Localize("Background"), HeadlineFontSize, TEXTALIGN_ML);
++		Ui()->DoLabel(&Headline, "背景", HeadlineFontSize, TEXTALIGN_ML);
 +		Content.HSplitTop(MarginSmall, nullptr, &Content);
 +
 +		// Where the background comes from: your own file, or Wallpaper Engine.
@@ -2099,9 +1831,9 @@ index 0000000..b8c071f
 +		Content.HSplitTop(LineSize, &SourceRow, &Content);
 +		CUIRect SourceLabel;
 +		SourceRow.VSplitLeft(90.0f, &SourceLabel, &SourceRow);
-+		Ui()->DoLabel(&SourceLabel, Localize("Source"), FontSize, TEXTALIGN_ML);
++		Ui()->DoLabel(&SourceLabel, "来源", FontSize, TEXTALIGN_ML);
 +		static CButtonContainer s_aSourceIds[2];
-+		static const char *const apSourceNames[] = {"Custom file", "Wallpaper Engine"};
++		static const char *const apSourceNames[] = {"自定义文件", "壁纸引擎"};
 +		const float SourceWidth = SourceRow.w / 2.0f;
 +		for(int i = 0; i < 2; ++i)
 +		{
@@ -2116,8 +1848,8 @@ index 0000000..b8c071f
 +			}
 +		}
 +
-+		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuBackground, Localize("Show custom background on the main menu"), &g_Config.m_McMenuBackground, &Content, LineSize);
-+		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McGameBackground, Localize("Show custom background on the entity layer (in game)"), &g_Config.m_McGameBackground, &Content, LineSize);
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuBackground, "主菜单显示自定义背景", &g_Config.m_McMenuBackground, &Content, LineSize);
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McGameBackground, "游戏内实体层显示自定义背景", &g_Config.m_McGameBackground, &Content, LineSize);
 +
 +		if(!UseWallpaperEngine)
 +		{
@@ -2126,10 +1858,10 @@ index 0000000..b8c071f
 +			Content.HSplitTop(LineSize, &PathRow, &Content);
 +			CUIRect PathLabel, PathBox;
 +			PathRow.VSplitLeft(60.0f, &PathLabel, &PathBox);
-+			Ui()->DoLabel(&PathLabel, Localize("File:"), FontSize, TEXTALIGN_ML);
++			Ui()->DoLabel(&PathLabel, "文件:", FontSize, TEXTALIGN_ML);
 +			static CLineInput s_PathInput;
 +			s_PathInput.SetBuffer(g_Config.m_McBackgroundPath, sizeof(g_Config.m_McBackgroundPath));
-+			s_PathInput.SetEmptyText(Localize("C:/path/to/background.png, .jpg or .mp4"));
++			s_PathInput.SetEmptyText("C:/路径/背景.png、.jpg 或 .mp4");
 +			Ui()->DoEditBox(&s_PathInput, &PathBox, EditBoxFontSize);
 +		}
 +		else
@@ -2138,7 +1870,7 @@ index 0000000..b8c071f
 +			CUIRect WeToggle;
 +			Content.HSplitTop(LineSize, &WeToggle, &Content);
 +			const auto &vWallpapers = m_WallpaperEngine.Wallpapers();
-+			const char *pSelectedName = Localize("none selected");
++			const char *pSelectedName = "未选择";
 +			if(g_Config.m_McWePath[0] != '\0')
 +			{
 +				const auto *pFound = m_WallpaperEngine.Find(g_Config.m_McWePath);
@@ -2147,7 +1879,7 @@ index 0000000..b8c071f
 +				else
 +					pSelectedName = g_Config.m_McWePath;
 +			}
-+			str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Wallpaper"), pSelectedName);
++			str_format(aBuf, sizeof(aBuf), "%s: %s", "壁纸", pSelectedName);
 +			static CButtonContainer s_WeToggleId;
 +			if(DoButton_Menu(&s_WeToggleId, aBuf, s_WeListExpanded ? 1 : 0, &WeToggle))
 +				s_WeListExpanded = !s_WeListExpanded;
@@ -2157,7 +1889,7 @@ index 0000000..b8c071f
 +				CUIRect EmptyRow;
 +				Content.HSplitTop(LineSize, &EmptyRow, &Content);
 +				const std::string &Error = m_WallpaperEngine.LastError();
-+				Ui()->DoLabel(&EmptyRow, Error.empty() ? Localize("No video or image wallpapers found.") : Error.c_str(), FontSize, TEXTALIGN_ML);
++				Ui()->DoLabel(&EmptyRow, Error.empty() ? "没有找到可用的视频与图片壁纸。" : Error.c_str(), FontSize, TEXTALIGN_ML);
 +			}
 +		}
 +
@@ -2168,7 +1900,7 @@ index 0000000..b8c071f
 +		CUIRect FpsBoxRect;
 +		FpsRow.VSplitRight(56.0f, &FpsRow, &FpsBoxRect);
 +		FpsRow.VSplitRight(MarginSmall, &FpsRow, nullptr);
-+		Ui()->DoScrollbarOption(&g_Config.m_McBackgroundVideoFps, &g_Config.m_McBackgroundVideoFps, &FpsRow, Localize("Video frame rate (0 = source)"), 0, 120, &CUi::ms_LinearScrollbarScale, 0u, " fps");
++		Ui()->DoScrollbarOption(&g_Config.m_McBackgroundVideoFps, &g_Config.m_McBackgroundVideoFps, &FpsRow, "视频帧率（0 = 源帧率）", 0, 120, &CUi::ms_LinearScrollbarScale, 0u, " fps");
 +		static CLineInputNumber s_FpsInput;
 +		static int s_FpsShown = -1;
 +		if(!s_FpsInput.IsActive() && s_FpsShown != g_Config.m_McBackgroundVideoFps)
@@ -2196,12 +1928,12 @@ index 0000000..b8c071f
 +		str_format(aFitButton, sizeof(aFitButton), "%s", pCurrentFit);
 +		CUIRect FitLabel, FitButton;
 +		FitHeaderRow.VSplitLeft(150.0f, &FitLabel, &FitButton);
-+		Ui()->DoLabel(&FitLabel, Localize("Background fit"), FontSize, TEXTALIGN_ML);
++		Ui()->DoLabel(&FitLabel, "背景适配尺寸", FontSize, TEXTALIGN_ML);
 +		static CButtonContainer s_FitButtonId;
 +		if(DoButton_Menu(&s_FitButtonId, aFitButton, s_FitExpanded ? 1 : 0, &FitButton))
 +			s_FitExpanded = !s_FitExpanded;
 +		DrawExpandArrow(FitButton, s_FitExpanded);
-+		GameClient()->m_Tooltips.DoToolTip(&s_FitButtonId, &FitButton, Localize("Expand to choose the composition aspect (crop reference); it never changes the video's decode resolution"));
++		GameClient()->m_Tooltips.DoToolTip(&s_FitButtonId, &FitButton, "展开选择构图比例（裁剪参考）；不会改变视频解码分辨率");
 +
 +		if(s_FitExpanded)
 +		{
@@ -2212,7 +1944,7 @@ index 0000000..b8c071f
 +			Content.HSplitTop(LineSize, &FitSlot, &Content);
 +			if(s_ScrollRegion.AddRect(FitSlot))
 +			{
-+				if(DoButton_Menu(&s_aFitIds[0], Localize("auto (detect screen)"), str_comp(pCurrentFit, "auto") == 0 ? 1 : 0, &FitSlot))
++				if(DoButton_Menu(&s_aFitIds[0], "自动（检测屏幕）", str_comp(pCurrentFit, "auto") == 0 ? 1 : 0, &FitSlot))
 +					str_copy(g_Config.m_McBackgroundFit, "auto", sizeof(g_Config.m_McBackgroundFit));
 +			}
 +			for(int i = 0; i < FitPresetCount; ++i)
@@ -2234,15 +1966,15 @@ index 0000000..b8c071f
 +		Content.HSplitTop(LineSize, &ResRow, &Content);
 +		CUIRect ResLabel, ResBox;
 +		ResRow.VSplitLeft(150.0f, &ResLabel, &ResBox);
-+		Ui()->DoLabel(&ResLabel, Localize("Video resolution"), FontSize, TEXTALIGN_ML);
-+		static const char *const apResNames[] = {"Original (source)", "2160p", "1440p", "1080p", "720p"};
++		Ui()->DoLabel(&ResLabel, "视频分辨率", FontSize, TEXTALIGN_ML);
++		static const char *const apResNames[] = {"原始（源）", "2160p", "1440p", "1080p", "720p"};
 +		const int ResIndex = std::clamp(g_Config.m_McBackgroundVideoRes, 0, 4);
 +		str_format(aBuf, sizeof(aBuf), "%s", Localize(apResNames[ResIndex]));
 +		static CButtonContainer s_ResButtonId;
 +		if(DoButton_Menu(&s_ResButtonId, aBuf, s_ResExpanded ? 1 : 0, &ResBox))
 +			s_ResExpanded = !s_ResExpanded;
 +		DrawExpandArrow(ResBox, s_ResExpanded);
-+		GameClient()->m_Tooltips.DoToolTip(&s_ResButtonId, &ResBox, Localize("Expand to limit the video decode resolution (performance trade-off)"));
++		GameClient()->m_Tooltips.DoToolTip(&s_ResButtonId, &ResBox, "展开限制视频解码分辨率（性能取舍）");
 +
 +		if(s_ResExpanded)
 +		{
@@ -2264,15 +1996,15 @@ index 0000000..b8c071f
 +		Content.HSplitTop(LineSize, &ModeRow, &Content);
 +		CUIRect ModeLabel, ModeBox;
 +		ModeRow.VSplitLeft(150.0f, &ModeLabel, &ModeBox);
-+		Ui()->DoLabel(&ModeLabel, Localize("Display mode"), FontSize, TEXTALIGN_ML);
-+		static const char *const apModeNames[] = {"Crop top/bottom", "Crop left/right", "Stretch", "Tile"};
++		Ui()->DoLabel(&ModeLabel, "显示方式", FontSize, TEXTALIGN_ML);
++		static const char *const apModeNames[] = {"裁上下", "裁左右", "拉伸", "平铺"};
 +		const int ModeIndex = std::clamp(g_Config.m_McBackgroundMode, 0, 3);
 +		str_format(aBuf, sizeof(aBuf), "%s", Localize(apModeNames[ModeIndex]));
 +		static CButtonContainer s_ModeButtonId;
 +		if(DoButton_Menu(&s_ModeButtonId, aBuf, s_ModeExpanded ? 1 : 0, &ModeBox))
 +			s_ModeExpanded = !s_ModeExpanded;
 +		DrawExpandArrow(ModeBox, s_ModeExpanded);
-+		GameClient()->m_Tooltips.DoToolTip(&s_ModeButtonId, &ModeBox, Localize("Expand to choose how the background fills the screen"));
++		GameClient()->m_Tooltips.DoToolTip(&s_ModeButtonId, &ModeBox, "展开选择背景铺满屏幕的方式");
 +
 +		if(s_ModeExpanded)
 +		{
@@ -2304,7 +2036,7 @@ index 0000000..b8c071f
 +			if(sscanf(g_Config.m_McBackgroundFit, "%dx%d", &FitW, &FitH) == 2 && FitW > 0 && FitH > 0)
 +				TargetAspect = (float)FitW / (float)FitH;
 +			const bool CropsSides = VideoAspect > TargetAspect;
-+			str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Effective"), CropsSides ? Localize("crop left/right") : Localize("crop top/bottom"));
++			str_format(aBuf, sizeof(aBuf), "%s: %s", "实际生效", CropsSides ? "裁左右" : "裁上下");
 +			TextRender()->TextColor(0.7f, 0.7f, 0.7f, 1.0f);
 +			Ui()->DoLabel(&HintRow, aBuf, FontSize, TEXTALIGN_ML);
 +			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -2319,9 +2051,9 @@ index 0000000..b8c071f
 +		Content.HSplitTop(LineSize, &ShadowRow, &Content);
 +		CUIRect ShadowLabel, ShadowSlots;
 +		ShadowRow.VSplitLeft(150.0f, &ShadowLabel, &ShadowSlots);
-+		Ui()->DoLabel(&ShadowLabel, Localize("Option shadow"), FontSize, TEXTALIGN_ML);
++		Ui()->DoLabel(&ShadowLabel, "选项背景深浅", FontSize, TEXTALIGN_ML);
 +		static const int s_aShadowLevels[5] = {0, 6, 13, 19, 25};
-+		static const char *const s_apShadowNames[5] = {"Transparent", "Hazy", "Faint", "Subtle", "Normal"};
++		static const char *const s_apShadowNames[5] = {"透明", "模糊", "微弱", "淡雅", "正常"};
 +		static CButtonContainer s_aShadowIds[5];
 +		const float ShadowSlotWidth = ShadowSlots.w / 5.0f;
 +		for(int i = 0; i < 5; ++i)
@@ -2332,12 +2064,12 @@ index 0000000..b8c071f
 +				g_Config.m_McUiPanelAlpha = s_aShadowLevels[i];
 +		}
 +
-+		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuTitle, Localize("Show the big DDNet TClient title on the main menu"), &g_Config.m_McMenuTitle, &Content, LineSize);
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuTitle, "主菜单显示大标题图", &g_Config.m_McMenuTitle, &Content, LineSize);
 +
 +		// status line
 +		CUIRect StatusRow;
 +		Content.HSplitTop(LineSize, &StatusRow, &Content);
-+		str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Status"), m_CustomBackground.StatusText());
++		str_format(aBuf, sizeof(aBuf), "%s: %s", "状态", m_CustomBackground.StatusText());
 +		if(m_CustomBackground.HasError())
 +			TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
 +		Ui()->DoLabel(&StatusRow, aBuf, FontSize, TEXTALIGN_ML);
@@ -2352,7 +2084,7 @@ index 0000000..b8c071f
 +		ButtonRow.VSplitRight(MarginSmall, &ButtonRow, nullptr);
 +
 +		static CButtonContainer s_OpenFolderId;
-+		if(DoButton_Menu(&s_OpenFolderId, Localize("Backgrounds folder"), 0, &ButtonRow))
++		if(DoButton_Menu(&s_OpenFolderId, "背景文件夹", 0, &ButtonRow))
 +		{
 +			Storage()->CreateFolder(CUSTOM_BG_FOLDER, IStorage::TYPE_SAVE);
 +			char aFullPath[IO_MAX_PATH_LENGTH];
@@ -2360,7 +2092,7 @@ index 0000000..b8c071f
 +			Client()->ViewFile(aFullPath);
 +			s_BackgroundFilesScanned = false;
 +		}
-+		GameClient()->m_Tooltips.DoToolTip(&s_OpenFolderId, &ButtonRow, Localize("Open the folder to add png/jpg/mp4 background files"));
++		GameClient()->m_Tooltips.DoToolTip(&s_OpenFolderId, &ButtonRow, "打开文件夹可放入 png/jpg/mp4 背景文件");
 +
 +		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
 +		TextRender()->SetRenderFlags(ETextRenderFlags::TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH | ETextRenderFlags::TEXT_RENDER_FLAG_NO_X_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_Y_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_PIXEL_ALIGNMENT | ETextRenderFlags::TEXT_RENDER_FLAG_NO_OVERSIZE);
@@ -2373,7 +2105,7 @@ index 0000000..b8c071f
 +			s_BackgroundFilesScanned = false;
 +			m_WallpaperEngine.Scan(true);
 +		}
-+		GameClient()->m_Tooltips.DoToolTip(&s_ReloadButtonId, &ReloadButton, Localize("Reload the file list"));
++		GameClient()->m_Tooltips.DoToolTip(&s_ReloadButtonId, &ReloadButton, "重新加载文件列表");
 +		}
 +	}
 +
@@ -2391,14 +2123,14 @@ index 0000000..b8c071f
 +			Content.HSplitTop(Margin, nullptr, &Content);
 +			CUIRect Headline;
 +			Content.HSplitTop(HeadlineHeight, &Headline, &Content);
-+			Ui()->DoLabel(&Headline, Localize("Wallpaper Engine wallpapers (video and image only)"), HeadlineFontSize, TEXTALIGN_ML);
++			Ui()->DoLabel(&Headline, "Wallpaper Engine 壁纸（仅视频与图片）", HeadlineFontSize, TEXTALIGN_ML);
 +			Content.HSplitTop(MarginSmall, nullptr, &Content);
 +
 +			if(vWallpapers.empty())
 +			{
 +				CUIRect EmptyRow;
 +				Content.HSplitTop(LineSize, &EmptyRow, &Content);
-+				Ui()->DoLabel(&EmptyRow, Localize("Nothing found. Scene and application wallpapers are not supported."), FontSize, TEXTALIGN_ML);
++				Ui()->DoLabel(&EmptyRow, "没有找到。不支持场景类与应用类壁纸。", FontSize, TEXTALIGN_ML);
 +			}
 +			else
 +			{
@@ -2447,14 +2179,14 @@ index 0000000..b8c071f
 +		Content.HSplitTop(Margin, nullptr, &Content);
 +		CUIRect Headline;
 +		Content.HSplitTop(HeadlineHeight, &Headline, &Content);
-+		Ui()->DoLabel(&Headline, Localize("Background"), HeadlineFontSize, TEXTALIGN_ML);
++		Ui()->DoLabel(&Headline, "背景", HeadlineFontSize, TEXTALIGN_ML);
 +		Content.HSplitTop(MarginSmall, nullptr, &Content);
 +
 +		if(FileCount == 0)
 +		{
 +			CUIRect EmptyRow;
 +			Content.HSplitTop(LineSize, &EmptyRow, &Content);
-+			Ui()->DoLabel(&EmptyRow, Localize("No files found. Put png/jpg/mp4 files into the folder above."), FontSize, TEXTALIGN_ML);
++			Ui()->DoLabel(&EmptyRow, "没有文件。请把 png/jpg/mp4 文件放入上面的文件夹。", FontSize, TEXTALIGN_ML);
 +		}
 +		else
 +		{
@@ -2482,34 +2214,6 @@ index 0000000..b8c071f
 +	s_ScrollRegion.End();
 +	} // if(s_ActiveModuleTab == 0)  —— 模块：背景
 +}
-diff --git a/src/game/client/components/menus_start.cpp b/src/game/client/components/menus_start.cpp
-index b54fb79..b8b5280 100644
---- a/src/game/client/components/menus_start.cpp
-+++ b/src/game/client/components/menus_start.cpp
-@@ -25,13 +25,16 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
- {
- 	GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_START);
- 
--	// render logo
--	Graphics()->TextureSet(g_pData->m_aImages[IMAGE_BANNER].m_Id);
--	Graphics()->QuadsBegin();
--	Graphics()->SetColor(1, 1, 1, 1);
--	IGraphics::CQuadItem QuadItem(MainView.w / 2 - 170, 60, 360, 103);
--	Graphics()->QuadsDrawTL(&QuadItem, 1);
--	Graphics()->QuadsEnd();
-+	// render logo (can be turned off with mc_menu_title)
-+	if(g_Config.m_McMenuTitle)
-+	{
-+		Graphics()->TextureSet(g_pData->m_aImages[IMAGE_BANNER].m_Id);
-+		Graphics()->QuadsBegin();
-+		Graphics()->SetColor(1, 1, 1, 1);
-+		IGraphics::CQuadItem QuadItem(MainView.w / 2 - 170, 60, 360, 103);
-+		Graphics()->QuadsDrawTL(&QuadItem, 1);
-+		Graphics()->QuadsEnd();
-+	}
- 
- 	const float Rounding = 10.0f;
- 	const float VMargin = MainView.w / 2 - 190.0f;
 diff --git a/src/game/client/components/wallpaper_engine.cpp b/src/game/client/components/wallpaper_engine.cpp
 new file mode 100644
 index 0000000..a4c2e21

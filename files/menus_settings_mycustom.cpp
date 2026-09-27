@@ -141,6 +141,37 @@ void CMenus::RenderSettingsMyCustom(CUIRect MainView)
 		TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 	};
 
+	// ==========================================================================
+	// 模块子栏：设置 → 「模块(Modules)」主栏 → 每个模块一个子栏。
+	// 所有模块（本仓库自带或由模块安装器装进来的）都挂在这一张表下：
+	//   新增模块 = s_aModuleTabs 加一行 + 下面加一个 `if(s_ActiveModuleTab == N)` 分支。
+	// ==========================================================================
+	static const struct
+	{
+		const char *pId;
+		const char *pName;
+	} s_aModuleTabs[] = {
+		{"background", "Background"},
+	};
+	constexpr int ModuleTabCount = (int)(sizeof(s_aModuleTabs) / sizeof(s_aModuleTabs[0]));
+	static int s_ActiveModuleTab = 0;
+	{
+		CUIRect ModuleBar;
+		MainView.HSplitTop(30.0f, &ModuleBar, &MainView);
+		MainView.HSplitTop(6.0f, nullptr, &MainView);
+		static CButtonContainer s_aModuleTabButtons[8];
+		for(int i = 0; i < ModuleTabCount; ++i)
+		{
+			CUIRect Tab;
+			ModuleBar.VSplitLeft(150.0f, &Tab, &ModuleBar);
+			if(DoButton_MenuTab(&s_aModuleTabButtons[i], TCLocalize(s_aModuleTabs[i].pName), s_ActiveModuleTab == i, &Tab, IGraphics::CORNER_ALL))
+				s_ActiveModuleTab = i;
+			ModuleBar.VSplitLeft(4.0f, nullptr, &ModuleBar);
+		}
+	}
+
+	if(s_ActiveModuleTab == 0) // 模块：背景
+	{
 	// refresh the file list before layout so the file section height is known
 	if(!s_BackgroundFilesScanned)
 		ScanCustomBackgroundFiles(Storage());
@@ -203,7 +234,7 @@ void CMenus::RenderSettingsMyCustom(CUIRect MainView)
 		SourceRow.VSplitLeft(90.0f, &SourceLabel, &SourceRow);
 		Ui()->DoLabel(&SourceLabel, TCLocalize("Source"), FontSize, TEXTALIGN_ML);
 		static CButtonContainer s_aSourceIds[2];
-		static const char *const apSourceNames[] = {"My own file", "Wallpaper Engine"};
+		static const char *const apSourceNames[] = {"Custom file", "Wallpaper Engine"};
 		const float SourceWidth = SourceRow.w / 2.0f;
 		for(int i = 0; i < 2; ++i)
 		{
@@ -529,33 +560,6 @@ void CMenus::RenderSettingsMyCustom(CUIRect MainView)
 		}
 	}
 
-	// ***** Section: Wallpaper Engine sound ***** //
-	if(UseWallpaperEngine)
-	{
-		constexpr float WeSoundRows = 4.0f;
-		CUIRect Box;
-		Column.HSplitTop(Margin + HeadlineHeight + MarginSmall + LineSize * WeSoundRows + Margin, &Box, &Column);
-		if(s_ScrollRegion.AddRect(Box))
-		{
-			Box.Draw(PanelColor, IGraphics::CORNER_ALL, 10.0f);
-			CUIRect Content = Box;
-			Content.HSplitTop(Margin, nullptr, &Content);
-			CUIRect Headline;
-			Content.HSplitTop(HeadlineHeight, &Headline, &Content);
-			Ui()->DoLabel(&Headline, TCLocalize("Wallpaper sound", "Wallpaper Engine"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McWeSound, TCLocalize("Play wallpaper sound"), &g_Config.m_McWeSound, &Content, LineSize);
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McWePauseOnBlur, TCLocalize("Pause the wallpaper when the game loses focus"), &g_Config.m_McWePauseOnBlur, &Content, LineSize);
-			CUIRect VolumeRow;
-			Content.HSplitTop(LineSize, &VolumeRow, &Content);
-			Ui()->DoScrollbarOption(&g_Config.m_McWeVolume, &g_Config.m_McWeVolume, &VolumeRow, TCLocalize("Wallpaper volume"), 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
-			CUIRect NoteRow;
-			Content.HSplitTop(LineSize, &NoteRow, &Content);
-			Ui()->DoLabel(&NoteRow, TCLocalize("Wallpaper sound is applied when the background video has an audio track."), FontSize, TEXTALIGN_ML);
-		}
-	}
-
 	// ***** Section: my own file list (only for the file source) ***** //
 	if(!UseWallpaperEngine)
 	{
@@ -609,4 +613,5 @@ void CMenus::RenderSettingsMyCustom(CUIRect MainView)
 		}
 	}
 	s_ScrollRegion.End();
+	} // if(s_ActiveModuleTab == 0)  —— 模块：背景
 }
