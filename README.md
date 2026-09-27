@@ -28,11 +28,13 @@ install.ps1 -SkipFfmpeg -FfmpegZip C:\dl\ffmpeg.zip
 
 | 基线 | 状态 | 说明 |
 |---|---|---|
-| **TClient 10.9.0**（`6b4118bf0`） | ✅ **完整验证** | 补丁干净套用 + 内容 25/25 一致 + 编译通过 + 实机逐项验证。 |
-| **DDNet 官方版** | ⚠️ **已量化差异，适配草案** | 实测与本模块基线几乎同源（`background.{h,cpp}`、`FindFFMPEG.cmake` 完全相同，引擎 4 个文件仅差 2~6 行）。**尚未编译验证**（需要 ddnet-libs 约 580MB 依赖 + 一次完整构建） |
+| **TClient 10.9.0**（`6b4118bf0`） | ✅ **完整验证** | 补丁干净套用 + 内容 25/25 一致 + 编译通过 + 实机逐项验证。容器内是 `patch/module.patch`。 |
+| **DDNet 官方版 19.9** | ✅ **编译验证通过** | 有**专用补丁** `patch/ddnet-19.9.patch`（容器内 `patch/ddnet.patch`）：DDNet 没有 `CScreenRect`/`GetScreen()` 结构体重载（改用四浮点 `GetScreen(&x,&y,&x2,&y2)`）、没有 `TCLocalize`（改 `Localize`，两参数形式取回退串）、配置变量加在公共 `config_variables.h`（TClient 是它自己的 `config_variables_tclient.h`）、`UiPage` 上限放宽、设置页枚举/标签/CMake 源列表按 DDNet 结构落位。22 文件 2638 行，一次编译通过并产出 `DDNet.exe`。 |
 | **其它第三方分支** | ⚠️ **通用做法** | 耦合面只有 6 处，用 `-Reject` 半自动套用 + 按锚点手工贴 |
 
-**为什么不做成"一个补丁通吃"**：各分支的 `CMakeLists.txt`（源文件列表）与设置页枚举结构差异最大（官方 vs TClient 的 `CMakeLists.txt` 就差了 263 行），硬套只会满屏冲突；而**引擎接口与背景组件部分几乎逐行同源**，所以补丁覆盖大部分、剩余按补丁里每个 hunk 的函数上下文锚点手工落位最稳。
+**多基线补丁机制**：`module.json` 里用 `patches` 映射按来源 id 给不同上游各带一份补丁（`{"tclient":"patch/module.patch","ddnet":"patch/ddnet.patch"}`），旧的单数 `patch` 仍作默认回退。安装器识别当前选择的上游后自动取对应那份，日志会写明「使用 ddnet 专用补丁」；某上游没有专用补丁时回退通用补丁并告警。
+
+**为什么不做成"一个补丁通吃"**：各分支的 `CMakeLists.txt`（源文件列表）与设置页枚举结构差异最大（官方 vs TClient 的 `CMakeLists.txt` 就差了 263 行），硬套只会满屏冲突；而**引擎接口与背景组件部分几乎逐行同源**，所以补丁覆盖大部分、剩余按补丁里每个 hunk 的函数上下文锚点手工落位最稳——落位完成后**把整棵树的 diff 固化成该基线的专用补丁**，下次安装就是干净一键。
 
 ```powershell
 apply.ps1 -Target C:\path\to\fork -CheckOnly   # 先看能不能干净套上（不改文件）

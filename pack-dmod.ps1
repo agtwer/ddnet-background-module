@@ -1,4 +1,4 @@
-﻿# ddnet-background-module —— 把模块打包成单文件 .dmod（就是个 zip 容器）
+# ddnet-background-module —— 把模块打包成单文件 .dmod（就是个 zip 容器）
 #
 #   powershell -ExecutionPolicy Bypass -File pack-dmod.ps1
 #
@@ -26,13 +26,18 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'patch') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'files') | Out-Null
 
 $meta.patch = 'patch/module.patch'
+$meta.patches = [ordered]@{ tclient = 'patch/module.patch'; ddnet = 'patch/ddnet.patch' }
 $json = $meta | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText((Join-Path $stage 'module.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
 
-# 补丁（项目内叫 ddnet-background.patch，容器内统一叫 patch/module.patch）
+# Patches: TClient baseline (patch\ddnet-background.patch -> patch/module.patch inside the dmod)
+# and DDNet official 19.9 baseline (patch\ddnet-19.9.patch -> patch/ddnet.patch).
 $patch = Join-Path $root 'patch\ddnet-background.patch'
-if (-not (Test-Path $patch)) { throw "缺少补丁: $patch（请先用 git diff --output 生成）" }
+if (-not (Test-Path $patch)) { throw "missing patch (TClient baseline): $patch" }
 Copy-Item $patch (Join-Path $stage 'patch\module.patch') -Force
+$patchDdnet = Join-Path $root 'patch\ddnet-19.9.patch'
+if (-not (Test-Path $patchDdnet)) { throw "missing patch (DDNet baseline): $patchDdnet" }
+Copy-Item $patchDdnet (Join-Path $stage 'patch\ddnet.patch') -Force
 
 # 新增源文件（手工安装用）
 Get-ChildItem (Join-Path $root 'files') -File | Copy-Item -Destination (Join-Path $stage 'files') -Force

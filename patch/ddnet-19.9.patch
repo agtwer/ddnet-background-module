@@ -1,0 +1,3049 @@
+﻿diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3695ae7..67b80dd 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -2497,6 +2497,8 @@ if(CLIENT)
+     components/controls.h
+     components/countryflags.cpp
+     components/countryflags.h
++    components/custom_background.cpp
++    components/custom_background.h
+     components/damageind.cpp
+     components/damageind.h
+     components/debughud.cpp
+@@ -2545,6 +2547,7 @@ if(CLIENT)
+     components/menus_settings_assets.cpp
+     components/menus_settings_controls.cpp
+     components/menus_settings_controls.h
++    components/menus_settings_mycustom.cpp
+     components/menus_start.cpp
+     components/menus_start.h
+     components/motd.cpp
+@@ -2575,6 +2578,8 @@ if(CLIENT)
+     components/touch_controls.h
+     components/voting.cpp
+     components/voting.h
++    components/wallpaper_engine.cpp
++    components/wallpaper_engine.h
+     gameclient.cpp
+     gameclient.h
+     laser_data.cpp
+diff --git a/cmake/FindFFMPEG.cmake b/cmake/FindFFMPEG.cmake
+index dfcd66f..3791d06 100644
+--- a/cmake/FindFFMPEG.cmake
++++ b/cmake/FindFFMPEG.cmake
+@@ -150,11 +150,11 @@ set(FFMPEG_COPY_FILES)
+ if(FFMPEG_BUNDLED)
+   if(TARGET_OS STREQUAL "windows")
+     set(FFMPEG_COPY_FILES
+-      "${EXTRA_FFMPEG_LIBDIR}/avcodec-61.dll"
+-      "${EXTRA_FFMPEG_LIBDIR}/avformat-61.dll"
+-      "${EXTRA_FFMPEG_LIBDIR}/avutil-59.dll"
+-      "${EXTRA_FFMPEG_LIBDIR}/swresample-5.dll"
+-      "${EXTRA_FFMPEG_LIBDIR}/swscale-8.dll"
++      "${EXTRA_FFMPEG_LIBDIR}/avcodec-62.dll"
++      "${EXTRA_FFMPEG_LIBDIR}/avformat-62.dll"
++      "${EXTRA_FFMPEG_LIBDIR}/avutil-60.dll"
++      "${EXTRA_FFMPEG_LIBDIR}/swresample-6.dll"
++      "${EXTRA_FFMPEG_LIBDIR}/swscale-9.dll"
+     )
+   elseif(TARGET_OS STREQUAL "mac")
+     set(FFMPEG_COPY_FILES
+diff --git a/src/engine/client/backend/null/backend_null.cpp b/src/engine/client/backend/null/backend_null.cpp
+index 1e2f27d..20e6408 100644
+--- a/src/engine/client/backend/null/backend_null.cpp
++++ b/src/engine/client/backend/null/backend_null.cpp
+@@ -16,6 +16,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_Null::RunCommand(const CCommand
+ 	case CCommandBuffer::CMD_TEXTURE_CREATE:
+ 		Cmd_Texture_Create(static_cast<const CCommandBuffer::SCommand_Texture_Create *>(pBaseCommand));
+ 		break;
++	case CCommandBuffer::CMD_TEXTURE_UPDATE:
++		// the null backend stores no pixel data, so an in-place update is a no-op
++		break;
+ 	case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
+ 		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
+ 		break;
+diff --git a/src/engine/client/backend/opengl/backend_opengl.cpp b/src/engine/client/backend/opengl/backend_opengl.cpp
+index 0f8e5c5..7974842 100644
+--- a/src/engine/client/backend/opengl/backend_opengl.cpp
++++ b/src/engine/client/backend/opengl/backend_opengl.cpp
+@@ -715,8 +715,7 @@ void CCommandProcessorFragment_OpenGL::DestroyTexture(int Slot)
+ 	m_vTextures[Slot].m_LastWrapMode = EWrapMode::REPEAT;
+ }
+ 
+-void CCommandProcessorFragment_OpenGL::Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand)
+-{
++void CCommandProcessorFragment_OpenGL::Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand){
+ 	DestroyTexture(pCommand->m_Slot);
+ }
+ 
+@@ -934,6 +933,11 @@ void CCommandProcessorFragment_OpenGL::Cmd_TextTexture_Update(const CCommandBuff
+ 	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_ALPHA, pCommand->m_pData);
+ }
+ 
++void CCommandProcessorFragment_OpenGL::Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand)
++{
++	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RGBA, pCommand->m_pData);
++}
++
+ void CCommandProcessorFragment_OpenGL::Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand)
+ {
+ 	DestroyTexture(pCommand->m_Slot);
+@@ -1075,6 +1079,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_OpenGL::RunCommand(const CComma
+ 	case CCommandBuffer::CMD_TEXTURE_DESTROY:
+ 		Cmd_Texture_Destroy(static_cast<const CCommandBuffer::SCommand_Texture_Destroy *>(pBaseCommand));
+ 		break;
++	case CCommandBuffer::CMD_TEXTURE_UPDATE:
++		Cmd_Texture_Update(static_cast<const CCommandBuffer::SCommand_Texture_Update *>(pBaseCommand));
++		break;
+ 	case CCommandBuffer::CMD_TEXT_TEXTURES_CREATE:
+ 		Cmd_TextTextures_Create(static_cast<const CCommandBuffer::SCommand_TextTextures_Create *>(pBaseCommand));
+ 		break;
+diff --git a/src/engine/client/backend/opengl/backend_opengl.h b/src/engine/client/backend/opengl/backend_opengl.h
+index 7c4b85c..b78eb12 100644
+--- a/src/engine/client/backend/opengl/backend_opengl.h
++++ b/src/engine/client/backend/opengl/backend_opengl.h
+@@ -91,6 +91,7 @@ protected:
+ 	virtual void Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand);
+ 	virtual void Cmd_Texture_Create(const CCommandBuffer::SCommand_Texture_Create *pCommand);
+ 	virtual void Cmd_TextTexture_Update(const CCommandBuffer::SCommand_TextTexture_Update *pCommand);
++	virtual void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand);
+ 	virtual void Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand);
+ 	virtual void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand);
+ 	virtual void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand);
+diff --git a/src/engine/client/backend/opengl/backend_opengl3.cpp b/src/engine/client/backend/opengl/backend_opengl3.cpp
+index 320f069..5593d22 100644
+--- a/src/engine/client/backend/opengl/backend_opengl3.cpp
++++ b/src/engine/client/backend/opengl/backend_opengl3.cpp
+@@ -707,6 +707,11 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTexture_Update(const CCommandB
+ 	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RED, pCommand->m_pData);
+ }
+ 
++void CCommandProcessorFragment_OpenGL3_3::Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand)
++{
++	TextureUpdate(pCommand->m_Slot, pCommand->m_X, pCommand->m_Y, pCommand->m_Width, pCommand->m_Height, GL_RGBA, pCommand->m_pData);
++}
++
+ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand)
+ {
+ 	DestroyTexture(pCommand->m_Slot);
+diff --git a/src/engine/client/backend/opengl/backend_opengl3.h b/src/engine/client/backend/opengl/backend_opengl3.h
+index df044a3..c47c726 100644
+--- a/src/engine/client/backend/opengl/backend_opengl3.h
++++ b/src/engine/client/backend/opengl/backend_opengl3.h
+@@ -87,6 +87,7 @@ protected:
+ 	void Cmd_Texture_Destroy(const CCommandBuffer::SCommand_Texture_Destroy *pCommand) override;
+ 	void Cmd_Texture_Create(const CCommandBuffer::SCommand_Texture_Create *pCommand) override;
+ 	void Cmd_TextTexture_Update(const CCommandBuffer::SCommand_TextTexture_Update *pCommand) override;
++	void Cmd_Texture_Update(const CCommandBuffer::SCommand_Texture_Update *pCommand) override;
+ 	void Cmd_TextTextures_Destroy(const CCommandBuffer::SCommand_TextTextures_Destroy *pCommand) override;
+ 	void Cmd_TextTextures_Create(const CCommandBuffer::SCommand_TextTextures_Create *pCommand) override;
+ 	void Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand) override;
+diff --git a/src/engine/client/graphics_threaded.cpp b/src/engine/client/graphics_threaded.cpp
+index fdc8cd0..f0142b0 100644
+--- a/src/engine/client/graphics_threaded.cpp
++++ b/src/engine/client/graphics_threaded.cpp
+@@ -174,6 +174,13 @@ void CGraphics_Threaded::WrapClamp()
+ 	m_State.m_WrapMode = EWrapMode::CLAMP;
+ }
+ 
++void CGraphics_Threaded::WrapRepeat()
++{
++	// The default ("normal") wrap mode already is REPEAT, so tiling a texture
++	// only needs an explicit setter to make the intent readable at call sites.
++	m_State.m_WrapMode = EWrapMode::REPEAT;
++}
++
+ uint64_t CGraphics_Threaded::TextureMemoryUsage() const
+ {
+ 	return m_pBackend->TextureMemoryUsage();
+@@ -400,6 +407,8 @@ static CCommandBuffer::SCommand_Texture_Create LoadTextureCreateCommand(int Text
+ 		Cmd.m_Flags |= TextureFlag::TO_3D_TEXTURE;
+ 	if((Flags & IGraphics::TEXLOAD_NO_2D_TEXTURE) != 0)
+ 		Cmd.m_Flags |= TextureFlag::NO_2D_TEXTURE;
++	if((Flags & IGraphics::TEXLOAD_NO_MIPMAPS) != 0)
++		Cmd.m_Flags |= TextureFlag::NO_MIPMAPS;
+ 
+ 	return Cmd;
+ }
+@@ -530,6 +539,47 @@ bool CGraphics_Threaded::UpdateTextTexture(CTextureHandle TextureId, int x, int
+ 	return true;
+ }
+ 
++bool CGraphics_Threaded::UpdateTextureRgba(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, const uint8_t *pData)
++{
++	if(!TextureId.IsValid() || pData == nullptr || Width == 0 || Height == 0)
++		return false;
++
++	// The command buffer's data ring holds CMD_BUFFER_DATA_BUFFER_SIZE bytes
++	// (2 MB). A payload larger than that cannot be handed over in one piece and
++	// drops off the fast path, so upload it in horizontal bands that each fit.
++	// This is what made large video backgrounds unusable: a 854x480 RGBA frame is
++	// 1.6 MB (fits, menu ran at ~203 fps) while 1280x720 is 3.7 MB and 2K is
++	// 9.4 MB (did not fit, menu fell to ~16 fps and ~4 fps respectively) — the
++	// cost tracked the texture size, not the decode cost.
++	const size_t RowBytes = Width * 4;
++	size_t RowsPerBand = (size_t)CMD_BUFFER_DATA_BUFFER_SIZE / RowBytes;
++	if(RowsPerBand == 0)
++		RowsPerBand = 1;
++
++	for(size_t Row = 0; Row < Height; Row += RowsPerBand)
++	{
++		const size_t BandRows = std::min(RowsPerBand, Height - Row);
++		const size_t MemSize = BandRows * RowBytes;
++
++		CCommandBuffer::SCommand_Texture_Update Cmd;
++		Cmd.m_Slot = TextureId.Id();
++		Cmd.m_X = x;
++		Cmd.m_Y = y + (int)Row;
++		Cmd.m_Width = Width;
++		Cmd.m_Height = BandRows;
++
++		// The command buffer owns the pixels until the backend has uploaded them.
++		uint8_t *pTmpData = static_cast<uint8_t *>(malloc(MemSize));
++		if(pTmpData == nullptr)
++			return false;
++		mem_copy(pTmpData, pData + Row * RowBytes, MemSize);
++		Cmd.m_pData = pTmpData;
++		AddCmd(Cmd);
++	}
++
++	return true;
++}
++
+ static SWarning FormatPngliteIncompatibilityWarning(int PngliteIncompatible, const char *pContextName)
+ {
+ 	SWarning Warning;
+diff --git a/src/engine/client/graphics_threaded.h b/src/engine/client/graphics_threaded.h
+index a83211d..468db05 100644
+--- a/src/engine/client/graphics_threaded.h
++++ b/src/engine/client/graphics_threaded.h
+@@ -123,6 +123,7 @@ public:
+ 		// texture commands
+ 		CMD_TEXTURE_CREATE,
+ 		CMD_TEXTURE_DESTROY,
++		CMD_TEXTURE_UPDATE,
+ 		CMD_TEXT_TEXTURES_CREATE,
+ 		CMD_TEXT_TEXTURES_DESTROY,
+ 		CMD_TEXT_TEXTURE_UPDATE,
+@@ -570,6 +571,24 @@ public:
+ 		uint8_t *m_pData; // will be freed by the command processor
+ 	};
+ 
++	// In-place update of a general RGBA texture. Without this, updating an
++	// animated texture means destroying and re-creating it every frame, which
++	// costs a full texture allocation plus a GPU-side delete of a texture that
++	// may still be in use by the previous frame's draw calls.
++	struct SCommand_Texture_Update : public SCommand
++	{
++		SCommand_Texture_Update() :
++			SCommand(CMD_TEXTURE_UPDATE) {}
++
++		int m_Slot;
++		int m_X;
++		int m_Y;
++		size_t m_Width;
++		size_t m_Height;
++		// RGBA rows of m_Width*4 bytes; freed by the command processor
++		uint8_t *m_pData;
++	};
++
+ 	struct SCommand_WindowCreateNtf : public CCommandBuffer::SCommand
+ 	{
+ 		SCommand_WindowCreateNtf() :
+@@ -908,6 +927,7 @@ public:
+ 
+ 	void WrapNormal() override;
+ 	void WrapClamp() override;
++	void WrapRepeat() override;
+ 
+ 	uint64_t TextureMemoryUsage() const override;
+ 	uint64_t BufferMemoryUsage() const override;
+@@ -937,6 +957,7 @@ public:
+ 	bool LoadTextTextures(size_t Width, size_t Height, CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture, uint8_t *pTextData, uint8_t *pTextOutlineData) override;
+ 	bool UnloadTextTextures(CTextureHandle &TextTexture, CTextureHandle &TextOutlineTexture) override;
+ 	bool UpdateTextTexture(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, uint8_t *pData, bool IsMovedPointer) override;
++	bool UpdateTextureRgba(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, const uint8_t *pData) override;
+ 
+ 	CTextureHandle LoadSpriteTexture(const CImageInfo &FromImageInfo, const struct CDataSprite *pSprite) override;
+ 
+diff --git a/src/engine/graphics.h b/src/engine/graphics.h
+index e5c7dd5..c08aa33 100644
+--- a/src/engine/graphics.h
++++ b/src/engine/graphics.h
+@@ -198,6 +198,10 @@ public:
+ 		TEXLOAD_TO_3D_TEXTURE = 1 << 0,
+ 		TEXLOAD_TO_2D_ARRAY_TEXTURE = 1 << 1,
+ 		TEXLOAD_NO_2D_TEXTURE = 1 << 2,
++		// Do not build a mipmap chain for this texture. Without it the driver
++		// regenerates the mipmaps on every write to the texture, which makes
++		// frequently updated (video) textures very expensive at large sizes.
++		TEXLOAD_NO_MIPMAPS = 1 << 3,
+ 	};
+ 
+ 	class CTextureHandle
+@@ -273,6 +277,9 @@ public:
+ 	virtual void BlendAdditive() = 0;
+ 	virtual void WrapNormal() = 0;
+ 	virtual void WrapClamp() = 0;
++	// Repeat addressing: needed to tile a texture (draw the same image several
++	// times). Restored with WrapNormal()/WrapClamp().
++	virtual void WrapRepeat() = 0;
+ 
+ 	virtual uint64_t TextureMemoryUsage() const = 0;
+ 	virtual uint64_t BufferMemoryUsage() const = 0;
+@@ -291,6 +298,11 @@ public:
+ 	virtual CTextureHandle LoadTextureRaw(const CImageInfo &Image, int Flags, const char *pTexName = nullptr) = 0;
+ 	virtual CTextureHandle LoadTextureRawMove(CImageInfo &Image, int Flags, const char *pTexName = nullptr) = 0;
+ 	virtual CTextureHandle LoadTexture(const char *pFilename, int StorageType, int Flags = 0) = 0;
++	// In-place update of a general RGBA texture, so animated textures do not have
++	// to be destroyed and re-created every frame. pData holds Height rows of
++	// Width*4 RGBA bytes and is copied internally (the caller keeps ownership).
++	// Width/Height must match the region being replaced; x/y select the offset.
++	virtual bool UpdateTextureRgba(CTextureHandle TextureId, int x, int y, size_t Width, size_t Height, const uint8_t *pData) = 0;
+ 	virtual void TextureSet(CTextureHandle Texture) = 0;
+ 	void TextureClear() { TextureSet(CTextureHandle()); }
+ 
+diff --git a/src/engine/shared/config_variables.h b/src/engine/shared/config_variables.h
+index b091e83..9de34d3 100644
+--- a/src/engine/shared/config_variables.h
++++ b/src/engine/shared/config_variables.h
+@@ -221,7 +221,20 @@ MACRO_CONFIG_STR(ClDummy7SkinEyes, dummy7_skin_eyes, protocol7::MAX_SKIN_ARRAY_S
+ // MACRO_CONFIG_INT(ClCensorChat, cl_censor_chat, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Toggles chat censoring")
+ // MACRO_CONFIG_STR(ClCensorUrl, cl_censor_url, 100, "https://info.ddnet.org/censor.json", CFGFLAG_CLIENT | CFGFLAG_SAVE, "URL used to download words to censor (must start with https://)")
+ 
+-MACRO_CONFIG_INT(UiPage, ui_page, 6, 6, 13, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface page")
++MACRO_CONFIG_INT(UiPage, ui_page, 6, 1, 17, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface page")
++MACRO_CONFIG_INT(McMenuBackground, mc_menu_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background (png/mp4) on the main menu")
++MACRO_CONFIG_INT(McGameBackground, mc_game_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the custom background (png/mp4) on the entity layer in game")
++MACRO_CONFIG_STR(McBackgroundPath, mc_background_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Path to the custom background file (png/mp4, relative to the save folder or absolute)")
++MACRO_CONFIG_INT(McBackgroundVideoFps, mc_background_video_fps, 30, 0, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Max frame rate of the custom background video, 0 = source frame rate (visual only, lowers decode cost)")
++MACRO_CONFIG_STR(McBackgroundFit, mc_background_fit, 32, "auto", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Background fit resolution: auto, a screen size, or a fixed WxH like 1920x1440 (background crop/decode box only; never changes the game resolution)")
++MACRO_CONFIG_INT(McBackgroundDiag, mc_background_diag, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Append background video diagnostics (decode rate, gate) to save/mcbg_diag.txt every 10s, 0 = off")
++MACRO_CONFIG_INT(McBackgroundThreads, mc_background_threads, 4, 0, 64, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Decoder threads for the background video, 0 = auto (one per logical core); 4 measured fastest for 2K sources")
++MACRO_CONFIG_INT(McBackgroundSource, mc_background_source, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Background source: 0 = your own image/video file, 1 = a Wallpaper Engine wallpaper")
++MACRO_CONFIG_STR(McWePath, mc_we_path, IO_MAX_PATH_LENGTH, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Selected Wallpaper Engine wallpaper (workshop id or folder path)")
++MACRO_CONFIG_INT(McUiPanelAlpha, mc_ui_panel_alpha, 25, 0, 25, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Opacity of the black panel ('shadow') behind menu options/rows and section boxes: 0..25 where 25 = the built-in default and 0 = no shadow at all")
++MACRO_CONFIG_INT(McMenuTitle, mc_menu_title, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the big title image on the main menu")
++MACRO_CONFIG_INT(McBackgroundMode, mc_background_mode, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "How the background fills the screen (never letterboxed): 0 = crop top/bottom (keep the whole width), 1 = crop left/right (keep the whole height), 2 = stretch, 3 = tile")
++MACRO_CONFIG_INT(McBackgroundVideoRes, mc_background_video_res, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Video decode resolution for the background: 0 = original source size (no downscale), 1 = 2160p, 2 = 1440p, 3 = 1080p, 4 = 720p")
+ MACRO_CONFIG_INT(UiSettingsPage, ui_settings_page, 0, 0, 9, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Interface settings page")
+ MACRO_CONFIG_INT(UiToolboxPage, ui_toolbox_page, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Toolbox page")
+ MACRO_CONFIG_STR(UiServerAddress, ui_server_address, 1024, "localhost:8303", CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_INSENSITIVE, "Interface server address")
+diff --git a/src/game/client/components/background.cpp b/src/game/client/components/background.cpp
+index 21a0306..478e921 100644
+--- a/src/game/client/components/background.cpp
++++ b/src/game/client/components/background.cpp
+@@ -34,6 +34,7 @@ void CBackground::OnInit()
+ 	m_pMap = m_pBackgroundMap.get();
+ 
+ 	m_pImages->OnInterfacesInit(GameClient());
++	m_MediaBackground.Init(Graphics(), Storage());
+ 	if(g_Config.m_ClBackgroundEntities[0] != '\0' && str_comp(g_Config.m_ClBackgroundEntities, CURRENT_MAP))
+ 		LoadBackground();
+ }
+@@ -93,10 +94,22 @@ void CBackground::OnMapLoad()
+ 
+ void CBackground::OnRender()
+ {
+-	if(!m_Loaded)
++	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
++	{
++		m_MediaBackground.Unload();
+ 		return;
++	}
+ 
+-	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
++	// My custom: local custom background (png/mp4) behind the entity layers, visual only.
++	// Update() (video decode) only runs while the background is actually visible.
++	m_MediaBackground.SyncFromConfig(g_Config.m_McGameBackground, g_Config.m_McBackgroundPath);
++	if(g_Config.m_McGameBackground && g_Config.m_ClOverlayEntities > 0)
++	{
++		m_MediaBackground.Update();
++		m_MediaBackground.Render();
++	}
++
++	if(!m_Loaded)
+ 		return;
+ 
+ 	if(g_Config.m_ClOverlayEntities != 100)
+diff --git a/src/game/client/components/background.h b/src/game/client/components/background.h
+index 0fd20e1..f584037 100644
+--- a/src/game/client/components/background.h
++++ b/src/game/client/components/background.h
+@@ -3,6 +3,7 @@
+ 
+ #include <engine/map.h>
+ 
++#include <game/client/components/custom_background.h>
+ #include <game/client/components/maplayers.h>
+ 
+ #include <cstdint>
+@@ -25,6 +26,9 @@ protected:
+ 	CLayers *m_pBackgroundLayers;
+ 	CMapImages *m_pBackgroundImages;
+ 
++	// My custom: local custom background (png/mp4) for the entity layer, visual only
++	CCustomMediaBackground m_MediaBackground;
++
+ public:
+ 	CBackground(ERenderType MapType = ERenderType::RENDERTYPE_BACKGROUND_FORCE, bool OnlineOnly = true);
+ 	~CBackground() override;
+diff --git a/src/game/client/components/custom_background.cpp b/src/game/client/components/custom_background.cpp
+new file mode 100644
+index 0000000..da99f3b
+--- /dev/null
++++ b/src/game/client/components/custom_background.cpp
+@@ -0,0 +1,1095 @@
++#include "custom_background.h"
++
++#include <base/fs.h>
++#include <base/mem.h>
++#include <base/str.h>
++#include <base/time.h>
++
++#include <engine/shared/config.h>
++
++#include <game/localization.h>
++
++#include <algorithm>
++#include <cmath>
++#include <cctype>
++#include <cstdio>
++#include <limits>
++
++#if defined(CONF_VIDEORECORDER)
++extern "C" {
++#include <libavcodec/avcodec.h>
++#include <libavformat/avformat.h>
++#include <libavutil/mathematics.h>
++#include <libswscale/swscale.h>
++}
++#endif
++
++namespace
++{
++	constexpr int CUSTOM_BG_DEFAULT_VIDEO_FRAME_MS = 33;
++	constexpr int CUSTOM_BG_MAX_VIDEO_FRAME_MS = 250;
++	constexpr int64_t CUSTOM_BG_PTS_UNSET = std::numeric_limits<int64_t>::min();
++
++	// Diagnostics window state (mc_background_diag 1 only). These help tell the
++	// menu render rate apart from the decode rate: if updates_per_10s is high but
++	// decodes_per_10s is low, the fps gate is the limiter and all good; if
++	// updates_per_10s itself is tiny, the whole menu loop is being slowed down.
++	int gs_DiagUpdates = 0;
++	int gs_DiagGated = 0;
++	double gs_DiagSwsMs = 0.0;
++	double gs_DiagUpMs = 0.0;
++	double gs_DiagDecodeWallMs = 0.0;
++	double gs_DiagRenderMs = 0.0;
++	int gs_DiagRenders = 0;
++
++	void DiagCountUpdate() { ++gs_DiagUpdates; }
++	void DiagCountGated() { ++gs_DiagGated; }
++	void DiagAddDecodeWallMs(double Ms) { gs_DiagDecodeWallMs += Ms; }
++	void DiagAddRenderMs(double Ms)
++	{
++		gs_DiagRenderMs += Ms;
++		++gs_DiagRenders;
++	}
++	void DiagUpdateTotals(double SwsMs, double UpMs)
++	{
++		gs_DiagSwsMs += SwsMs;
++		gs_DiagUpMs += UpMs;
++	}
++	int DiagUpdates() { return gs_DiagUpdates; }
++	int DiagGated() { return gs_DiagGated; }
++	double DiagDecodeWallMs() { return gs_DiagDecodeWallMs; }
++	double DiagRenderMs() { return gs_DiagRenderMs; }
++	int DiagRenders() { return gs_DiagRenders; }
++	void DiagResetWindow()
++	{
++		gs_DiagUpdates = 0;
++		gs_DiagGated = 0;
++		gs_DiagSwsMs = 0.0;
++		gs_DiagUpMs = 0.0;
++		gs_DiagDecodeWallMs = 0.0;
++		gs_DiagRenderMs = 0.0;
++		gs_DiagRenders = 0;
++	}
++
++	// Round up to the next power of two (used to keep video textures off the
++	// driver's non-power-of-two CPU-resize path).
++	int PowerOfTwoCeil(int Value)
++	{
++		int Result = 1;
++		while(Result < Value && Result < (1 << 20))
++			Result <<= 1;
++		return Result;
++	}
++
++	// Resolve a background path to an absolute filesystem path.
++	//
++	// IStorage::GetCompletePath() asserts Type >= TYPE_SAVE, so TYPE_ABSOLUTE
++	// (-2) must never reach it. Wallpaper Engine entries are absolute paths,
++	// which is exactly how that assert was hit in game (storage.cpp:876
++	// "Type invalid"). Absolute inputs are therefore passed through untouched and
++	// only relative ones are resolved against the save directory.
++	void ResolveToAbsolute(IStorage *pStorage, const char *pPath, char *pOut, size_t OutSize)
++	{
++		if(pPath == nullptr || pPath[0] == '\0')
++		{
++			pOut[0] = '\0';
++			return;
++		}
++		if(!fs_is_relative_path(pPath))
++		{
++			str_copy(pOut, pPath, OutSize);
++			return;
++		}
++		pStorage->GetCompletePath(IStorage::TYPE_SAVE, pPath, pOut, OutSize);
++	}
++
++	const char *ExtensionOf(const char *pPath)
++	{
++		const char *pDot = nullptr;
++		for(const char *p = pPath; *p != '\0'; ++p)
++		{
++			if(*p == '.')
++				pDot = p;
++		}
++		return pDot == nullptr ? "" : pDot + 1;
++	}
++
++	void ExtensionLower(const char *pPath, char *pOut, size_t OutSize)
++	{
++		size_t i = 0;
++		const char *pExt = ExtensionOf(pPath);
++		for(; *pExt != '\0' && i + 1 < OutSize; ++pExt, ++i)
++			pOut[i] = (char)tolower((unsigned char)*pExt);
++		pOut[i] = '\0';
++	}
++
++	// parse mc_background_fit: "auto"/"" -> false (caller falls back to the
++	// screen), otherwise a "WxH" pixel size like "1920x1440"
++	bool ParseFitPx(const char *pFit, int &FitW, int &FitH)
++	{
++		int W = 0;
++		int H = 0;
++		if(pFit == nullptr || pFit[0] == '\0' || str_comp(pFit, "auto") == 0)
++			return false;
++		if(sscanf(pFit, "%dx%d", &W, &H) != 2 || W <= 0 || H <= 0)
++			return false;
++		FitW = W;
++		FitH = H;
++		return true;
++	}
++
++	bool IsVideoExtension(const char *pExt)
++	{
++		static const char *apVideoExts[] = {
++			"mp4", "mkv", "webm", "mov", "avi", "m4v", "mpg", "mpeg", "flv", "wmv", "ts", "3gp"};
++		for(const char *pVideoExt : apVideoExts)
++		{
++			if(str_comp(pExt, pVideoExt) == 0)
++				return true;
++		}
++		return false;
++	}
++}
++
++void CCustomMediaBackground::SetStatus(EStatus Status)
++{
++	m_Status = Status;
++	m_HasError = !(Status == EStatus::DISABLED || Status == EStatus::LOADED_IMAGE || Status == EStatus::LOADED_VIDEO);
++}
++
++const char *CCustomMediaBackground::StatusText() const
++{
++	switch(m_Status)
++	{
++	case EStatus::DISABLED: return Localize("Disabled.");
++	case EStatus::NO_FILE: return Localize("No file selected.");
++	case EStatus::LOADED_IMAGE: return Localize("Loaded image.");
++	case EStatus::LOADED_VIDEO: return Localize("Loaded video.");
++	case EStatus::FAILED_IMAGE: return Localize("Failed to load image.");
++	case EStatus::FAILED_OPEN_VIDEO: return Localize("Failed to open video.");
++	case EStatus::FAILED_VIDEO_INFO: return Localize("Failed to read video info.");
++	case EStatus::NO_VIDEO_STREAM: return Localize("No video stream found.");
++	case EStatus::BAD_VIDEO_CODEC: return Localize("Unsupported video codec.");
++	case EStatus::FAILED_DECODER_INIT: return Localize("Failed to initialize video decoder.");
++	case EStatus::INVALID_DIMENSIONS: return Localize("Invalid video dimensions.");
++	case EStatus::FAILED_FRAME_ALLOC: return Localize("Failed to allocate video frames.");
++	case EStatus::FAILED_RGBA_ALLOC: return Localize("Failed to allocate RGBA frame.");
++	case EStatus::FAILED_SCALER: return Localize("Failed to initialize video scaler.");
++	case EStatus::FAILED_FIRST_FRAME: return Localize("Failed to decode first video frame.");
++	case EStatus::FAILED_DECODE: return Localize("Failed while decoding video.");
++	case EStatus::NO_VIDEO_SUPPORT: return Localize("This build has no video support.");
++	}
++	return "";
++}
++
++void CCustomMediaBackground::ClearVideoState()
++{
++#if defined(CONF_VIDEORECORDER)
++	if(m_pPacket != nullptr)
++		av_packet_free(&m_pPacket);
++	if(m_pFrameRgba != nullptr)
++		av_frame_free(&m_pFrameRgba);
++	if(m_pFrame != nullptr)
++		av_frame_free(&m_pFrame);
++	if(m_pSwsCtx != nullptr)
++		sws_freeContext(m_pSwsCtx);
++	if(m_pCodecCtx != nullptr)
++		avcodec_free_context(&m_pCodecCtx);
++	if(m_pFormatCtx != nullptr)
++		avformat_close_input(&m_pFormatCtx);
++#endif
++	m_pFormatCtx = nullptr;
++	m_pCodecCtx = nullptr;
++	m_pFrame = nullptr;
++	m_pFrameRgba = nullptr;
++	m_pPacket = nullptr;
++	m_pSwsCtx = nullptr;
++	m_VideoStream = -1;
++	m_LastVideoPts = CUSTOM_BG_PTS_UNSET;
++	m_NextFrameTime = std::chrono::nanoseconds::zero();
++	m_vUploadBuffer.clear();
++}
++
++void CCustomMediaBackground::DisplayedUvRect(float &U0, float &V0, float &U1, float &V1) const
++{
++	U0 = m_DisplayU0;
++	V0 = m_DisplayV0;
++	U1 = m_DisplayU1;
++	V1 = m_DisplayV1;
++}
++
++void CCustomMediaBackground::Unload()
++{
++	if(m_pGraphics != nullptr && m_Texture.IsValid())
++		m_pGraphics->UnloadTexture(&m_Texture);
++	ClearVideoState();
++
++	m_Width = 0;
++	m_Height = 0;
++	m_TextureWidth = 0;
++	m_TextureHeight = 0;
++	m_UploadWidth = 0;
++	m_UploadHeight = 0;
++	m_SrcWidth = 0;
++	m_SrcHeight = 0;
++	m_IsVideo = false;
++	m_IsLoaded = false;
++	m_aLoadedPath[0] = '\0';
++	m_LastConfigEnabled = -1;
++	m_aLastConfigPath[0] = '\0';
++	// note: m_LastVideoRes must NOT be reset here. It caches
++	// g_Config.m_McBackgroundVideoRes for SyncFromConfig; clearing it inside the
++	// reload it triggered made every frame look like a settings change (reload
++	// loop, video frozen on a black first frame — the same class of bug that
++	// m_aLastFit used to cause).
++	SetStatus(EStatus::DISABLED);
++}
++
++void CCustomMediaBackground::ResolveFitBox(int &FitW, int &FitH) const
++{
++	// manual WxH: background-only resolution, the game resolution stays untouched
++	if(ParseFitPx(g_Config.m_McBackgroundFit, FitW, FitH))
++		return;
++	// auto: detect the current screen parameters (HiDPI aware)
++	FitW = 0;
++	FitH = 0;
++	if(m_pGraphics != nullptr && g_Config.m_GfxScreenWidth > 0 && g_Config.m_GfxScreenHeight > 0)
++	{
++		const float Scale = m_pGraphics->ScreenHiDPIScale();
++		FitW = (int)((float)g_Config.m_GfxScreenWidth * Scale + 0.5f);
++		FitH = (int)((float)g_Config.m_GfxScreenHeight * Scale + 0.5f);
++	}
++	if(FitW <= 0)
++		FitW = 1920;
++	if(FitH <= 0)
++		FitH = 1080;
++}
++
++CCustomMediaBackground::~CCustomMediaBackground()
++{
++	Unload();
++}
++
++void CCustomMediaBackground::Init(IGraphics *pGraphics, IStorage *pStorage)
++{
++	m_pGraphics = pGraphics;
++	m_pStorage = pStorage;
++	SetStatus(EStatus::DISABLED);
++}
++
++bool CCustomMediaBackground::DecodeFirstFrameFromFile(const char *pAbsolutePath)
++{
++#if !defined(CONF_VIDEORECORDER)
++	(void)pAbsolutePath;
++	return false;
++#else
++	if(pAbsolutePath == nullptr || pAbsolutePath[0] == '\0')
++		return false;
++
++	AVFormatContext *pFormatCtx = nullptr;
++	AVCodecContext *pCodecCtx = nullptr;
++	SwsContext *pSwsCtx = nullptr;
++	AVPacket *pPacket = nullptr;
++	AVFrame *pFrame = nullptr;
++	AVFrame *pFrameRgba = nullptr;
++	int VideoStream = -1;
++	bool Success = false;
++	int SrcW = 0;
++	int SrcH = 0;
++	size_t FrameBytes = 0;
++
++	auto CopyFrame = [&]() -> bool {
++		if(pFrame == nullptr || pFrameRgba == nullptr || pSwsCtx == nullptr || SrcW <= 0 || SrcH <= 0 || FrameBytes == 0)
++			return false;
++		if(av_frame_make_writable(pFrameRgba) < 0)
++			return false;
++		const int ScaledLines = sws_scale(pSwsCtx, pFrame->data, pFrame->linesize, 0, SrcH, pFrameRgba->data, pFrameRgba->linesize);
++		if(ScaledLines <= 0 || pFrameRgba->linesize[0] <= 0 || (size_t)pFrameRgba->linesize[0] < (size_t)SrcW * 4ull)
++			return false;
++
++		CImageInfo Image;
++		Image.m_Width = SrcW;
++		Image.m_Height = SrcH;
++		Image.m_Format = CImageInfo::FORMAT_RGBA;
++		Image.Allocate();
++		for(int y = 0; y < SrcH; ++y)
++		{
++			mem_copy(
++				Image.m_pData + (size_t)y * (size_t)SrcW * 4ull,
++				pFrameRgba->data[0] + (size_t)y * (size_t)pFrameRgba->linesize[0],
++				(size_t)SrcW * 4ull);
++		}
++
++		if(m_Texture.IsValid())
++			m_pGraphics->UnloadTexture(&m_Texture);
++		m_Texture = m_pGraphics->LoadTextureRawMove(Image, 0, pAbsolutePath);
++		if(!m_Texture.IsValid())
++			return false;
++		m_Width = SrcW;
++		m_Height = SrcH;
++		return true;
++	};
++
++	do
++	{
++		if(avformat_open_input(&pFormatCtx, pAbsolutePath, nullptr, nullptr) != 0)
++			break;
++		if(avformat_find_stream_info(pFormatCtx, nullptr) < 0)
++			break;
++
++		VideoStream = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
++		if(VideoStream < 0)
++			break;
++
++		const AVStream *pStream = pFormatCtx->streams[VideoStream];
++		const AVCodec *pCodec = avcodec_find_decoder(pStream->codecpar->codec_id);
++		if(pCodec == nullptr)
++			break;
++
++		pCodecCtx = avcodec_alloc_context3(pCodec);
++		if(pCodecCtx == nullptr || avcodec_parameters_to_context(pCodecCtx, pStream->codecpar) < 0 || avcodec_open2(pCodecCtx, pCodec, nullptr) < 0)
++			break;
++
++		SrcW = pCodecCtx->width;
++		SrcH = pCodecCtx->height;
++		if(SrcW <= 0 || SrcH <= 0)
++			break;
++		if((size_t)SrcW > std::numeric_limits<size_t>::max() / ((size_t)SrcH * 4ull))
++			break;
++		FrameBytes = (size_t)SrcW * (size_t)SrcH * 4ull;
++		if(FrameBytes == 0)
++			break;
++
++		pSwsCtx = sws_getContext(SrcW, SrcH, pCodecCtx->pix_fmt, SrcW, SrcH, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
++		if(pSwsCtx == nullptr)
++			break;
++
++		pPacket = av_packet_alloc();
++		pFrame = av_frame_alloc();
++		pFrameRgba = av_frame_alloc();
++		if(pPacket == nullptr || pFrame == nullptr || pFrameRgba == nullptr)
++			break;
++
++		pFrameRgba->format = AV_PIX_FMT_RGBA;
++		pFrameRgba->width = SrcW;
++		pFrameRgba->height = SrcH;
++		if(av_frame_get_buffer(pFrameRgba, 1) < 0)
++			break;
++
++		while(av_read_frame(pFormatCtx, pPacket) >= 0)
++		{
++			if(pPacket->stream_index == VideoStream)
++			{
++				if(avcodec_send_packet(pCodecCtx, pPacket) < 0)
++				{
++					av_packet_unref(pPacket);
++					break;
++				}
++				while(avcodec_receive_frame(pCodecCtx, pFrame) == 0)
++				{
++					if(CopyFrame())
++					{
++						Success = true;
++						break;
++					}
++				}
++			}
++			av_packet_unref(pPacket);
++			if(Success)
++				break;
++		}
++
++		if(!Success && avcodec_send_packet(pCodecCtx, nullptr) >= 0)
++		{
++			while(avcodec_receive_frame(pCodecCtx, pFrame) == 0)
++			{
++				if(CopyFrame())
++				{
++					Success = true;
++					break;
++				}
++			}
++		}
++	} while(false);
++
++	if(pFrameRgba != nullptr)
++		av_frame_free(&pFrameRgba);
++	if(pFrame != nullptr)
++		av_frame_free(&pFrame);
++	if(pPacket != nullptr)
++		av_packet_free(&pPacket);
++	if(pSwsCtx != nullptr)
++		sws_freeContext(pSwsCtx);
++	if(pCodecCtx != nullptr)
++		avcodec_free_context(&pCodecCtx);
++	if(pFormatCtx != nullptr)
++		avformat_close_input(&pFormatCtx);
++
++	return Success;
++#endif
++}
++
++bool CCustomMediaBackground::LoadImage(const char *pPath, int StorageType)
++{
++	m_IsVideo = false;
++
++	char aExt[16];
++	ExtensionLower(pPath, aExt, sizeof(aExt));
++
++	// plain PNG files go through the engine's own PNG loader
++	if(str_comp(aExt, "png") == 0)
++	{
++		CImageInfo Image;
++		if(m_pGraphics->LoadPng(Image, pPath, StorageType))
++		{
++			const int Width = (int)Image.m_Width;
++			const int Height = (int)Image.m_Height;
++			IGraphics::CTextureHandle Texture = m_pGraphics->LoadTextureRawMove(Image, 0, pPath);
++			if(Texture.IsValid())
++			{
++				if(m_Texture.IsValid())
++					m_pGraphics->UnloadTexture(&m_Texture);
++				m_Texture = Texture;
++				m_Width = Width;
++				m_Height = Height;
++				m_IsLoaded = true;
++				SetStatus(EStatus::LOADED_IMAGE);
++				return true;
++			}
++		}
++	}
++
++#if defined(CONF_VIDEORECORDER)
++	// Resolve through the helper: absolute paths (Wallpaper Engine wallpapers)
++	// bypass GetCompletePath, which would assert on TYPE_ABSOLUTE.
++	char aAbsolutePath[IO_MAX_PATH_LENGTH];
++	ResolveToAbsolute(m_pStorage, pPath, aAbsolutePath, sizeof(aAbsolutePath));
++	if(DecodeFirstFrameFromFile(aAbsolutePath))
++	{
++		m_IsLoaded = true;
++		SetStatus(EStatus::LOADED_IMAGE);
++		return true;
++	}
++#endif
++
++	SetStatus(EStatus::FAILED_IMAGE);
++	return false;
++}
++
++bool CCustomMediaBackground::UploadCurrentVideoFrame(int DurationMs)
++{
++#if !defined(CONF_VIDEORECORDER)
++	(void)DurationMs;
++	return false;
++#else
++	if(m_pGraphics == nullptr || m_pFrame == nullptr || m_pFrameRgba == nullptr || m_pSwsCtx == nullptr ||
++		m_Width <= 0 || m_Height <= 0 || m_UploadWidth <= 0 || m_UploadHeight <= 0)
++		return false;
++
++	if(av_frame_make_writable(m_pFrameRgba) < 0)
++		return false;
++
++	const auto SwsT0 = std::chrono::steady_clock::now();
++	// The scaler writes the video into the top-left m_Width x m_Height rectangle
++	// of the padded frame; the border is padding that Render() never samples.
++	sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_SrcHeight, m_pFrameRgba->data, m_pFrameRgba->linesize);
++	const double SwsMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - SwsT0).count();
++
++	// Upload the whole padded texture (a power-of-two size on both axes), which
++	// keeps the driver off its non-power-of-two CPU-resize path. The frame is
++	// allocated at exactly this size, so no per-frame row copy is needed.
++	CImageInfo Image;
++	Image.m_Width = m_UploadWidth;
++	Image.m_Height = m_UploadHeight;
++	Image.m_Format = CImageInfo::FORMAT_RGBA;
++	Image.m_pData = m_pFrameRgba->data[0];
++
++	// Upload the frame.
++	//
++	// Three things matter here, all measured with a 2K video background:
++	//
++	// 1) POWER-OF-TWO SIZE. The OpenGL backend CPU-resizes non-power-of-two
++	//    textures on every update (TextureUpdate -> ResizeImage when
++	//    !m_HasNPOTTextures). At 2560x1440 that meant resampling to 4096x2048
++	//    (~33 MB) per frame, which is what actually made the menu collapse to
++	//    ~4 fps. The texture is therefore allocated at m_UploadWidth x
++	//    m_UploadHeight (powers of two) and Render() maps UVs to the real video
++	//    rectangle, so the padding is never sampled.
++	// 2) MIPMAPS. Flags=0 leaves GL_GENERATE_MIPMAP on, regenerating the whole
++	//    chain on every write; TEXLOAD_NO_MIPMAPS disables that. A background is
++	//    drawn 1:1 or minified by the quad, so mipmaps are not needed.
++	// 3) REUSE. The texture is allocated once and then refreshed in place through
++	//    IGraphics::UpdateTextureRgba() (glTexSubImage2D) instead of being
++	//    destroyed and re-created every frame.
++	const auto UpT0 = std::chrono::steady_clock::now();
++	bool UploadOk;
++	if(m_Texture.IsValid() && m_TextureWidth == m_UploadWidth && m_TextureHeight == m_UploadHeight)
++	{
++		UploadOk = m_pGraphics->UpdateTextureRgba(m_Texture, 0, 0, (size_t)m_UploadWidth, (size_t)m_UploadHeight, Image.m_pData);
++	}
++	else
++	{
++		// first frame (or the decode box changed): allocate the texture once
++		IGraphics::CTextureHandle Texture = m_pGraphics->LoadTextureRaw(Image, IGraphics::TEXLOAD_NO_MIPMAPS, m_aLoadedPath);
++		UploadOk = Texture.IsValid();
++		if(UploadOk)
++		{
++			if(m_Texture.IsValid())
++				m_pGraphics->UnloadTexture(&m_Texture);
++			m_Texture = Texture;
++			m_TextureWidth = m_UploadWidth;
++			m_TextureHeight = m_UploadHeight;
++		}
++	}
++	const double UpMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - UpT0).count();
++	Image.m_pData = nullptr; // owned by m_pFrameRgba
++	if(!UploadOk)
++		return false;
++
++	m_LastVideoPts = m_pFrame->best_effort_timestamp;
++	// optional frame rate cap (mc_background_video_fps): only ever slows the video down,
++	// never speeds it up, and reduces decode + texture upload cost
++	int EffectiveMs = DurationMs;
++	if(const int Fps = g_Config.m_McBackgroundVideoFps; Fps > 0)
++		EffectiveMs = std::max(EffectiveMs, (1000 + Fps - 1) / Fps);
++	m_NextFrameTime = time_get_nanoseconds() + std::chrono::milliseconds(std::clamp(EffectiveMs, 1, CUSTOM_BG_MAX_VIDEO_FRAME_MS));
++	// Opt-in diagnostics (mc_background_diag 1): append pipeline counters every
++	// ~10s to <save>/mcbg_diag.txt. The decode rate proves whether the fps gate
++	// (m_NextFrameTime) actually throttles, and reload lines expose load loops.
++	// Default 0 => never writes anything (no standing instrumentation).
++	if(g_Config.m_McBackgroundDiag)
++	{
++		static int64_t s_DiagWindowStart = 0;
++		static int s_DiagDecodes = 0;
++		static int s_DiagSumEffective = 0;
++		static double s_DiagSumSws = 0.0;
++		static double s_DiagSumUp = 0.0;
++		++s_DiagDecodes;
++		s_DiagSumEffective += EffectiveMs;
++		s_DiagSumSws += SwsMs;
++		s_DiagSumUp += UpMs;
++		DiagUpdateTotals(SwsMs, UpMs);
++		const int64_t NowT = time_get();
++		if(s_DiagWindowStart == 0)
++			s_DiagWindowStart = NowT;
++		if(NowT - s_DiagWindowStart >= 10 * time_freq())
++		{
++			char aDiagPath[IO_MAX_PATH_LENGTH];
++			m_pStorage->GetCompletePath(IStorage::TYPE_SAVE, "mcbg_diag.txt", aDiagPath, sizeof(aDiagPath));
++			if(FILE *pFile = fopen(aDiagPath, "a"))
++			{
++				const auto NextGapMs = std::chrono::duration_cast<std::chrono::milliseconds>(m_NextFrameTime - std::chrono::nanoseconds(time_get())).count();
++				fprintf(pFile, "updates_per_10s=%d gated_per_10s=%d decodes_per_10s=%d avg_sws_ms=%.2f avg_upload_ms=%.1f decode_wall_ms=%.0f renders=%d render_ms=%.0f avg_effective_ms=%.1f cap_fps=%d threads=%d next_gap_ms=%lld\n",
++					DiagUpdates(), DiagGated(), s_DiagDecodes,
++					s_DiagDecodes > 0 ? s_DiagSumSws / s_DiagDecodes : 0.0,
++					s_DiagDecodes > 0 ? s_DiagSumUp / s_DiagDecodes : 0.0,
++					DiagDecodeWallMs(), DiagRenders(), DiagRenderMs(),
++					s_DiagDecodes > 0 ? (double)s_DiagSumEffective / s_DiagDecodes : 0.0,
++					g_Config.m_McBackgroundVideoFps, g_Config.m_McBackgroundThreads, (long long)NextGapMs);
++				fclose(pFile);
++			}
++			s_DiagWindowStart = NowT;
++			s_DiagDecodes = 0;
++			s_DiagSumEffective = 0;
++			s_DiagSumSws = 0.0;
++			s_DiagSumUp = 0.0;
++			DiagResetWindow();
++		}
++	}
++	return true;
++#endif
++}
++
++bool CCustomMediaBackground::DecodeNextVideoFrame(bool LoopOnEof)
++{
++#if !defined(CONF_VIDEORECORDER)
++	(void)LoopOnEof;
++	return false;
++#else
++	if(m_pFormatCtx == nullptr || m_pCodecCtx == nullptr || m_pPacket == nullptr || m_pFrame == nullptr)
++		return false;
++
++	while(true)
++	{
++		while(avcodec_receive_frame(m_pCodecCtx, m_pFrame) == 0)
++		{
++			int DurationMs = CUSTOM_BG_DEFAULT_VIDEO_FRAME_MS;
++			if(m_LastVideoPts != CUSTOM_BG_PTS_UNSET && m_pFrame->best_effort_timestamp != AV_NOPTS_VALUE)
++			{
++				const int64_t DurationTs = m_pFrame->best_effort_timestamp - m_LastVideoPts;
++				if(DurationTs > 0)
++				{
++					const int64_t Rescaled = av_rescale_q(DurationTs, m_pFormatCtx->streams[m_VideoStream]->time_base, AVRational{1, 1000});
++					if(Rescaled > 0)
++						DurationMs = (int)Rescaled;
++				}
++			}
++			return UploadCurrentVideoFrame(DurationMs);
++		}
++
++		const int ReadResult = av_read_frame(m_pFormatCtx, m_pPacket);
++		if(ReadResult < 0)
++		{
++			if(!LoopOnEof)
++				return false;
++
++			av_seek_frame(m_pFormatCtx, m_VideoStream, 0, AVSEEK_FLAG_BACKWARD);
++			avcodec_flush_buffers(m_pCodecCtx);
++			m_LastVideoPts = CUSTOM_BG_PTS_UNSET;
++			continue;
++		}
++
++		if(m_pPacket->stream_index != m_VideoStream)
++		{
++			av_packet_unref(m_pPacket);
++			continue;
++		}
++
++		const int SendResult = avcodec_send_packet(m_pCodecCtx, m_pPacket);
++		av_packet_unref(m_pPacket);
++		if(SendResult < 0)
++			return false;
++	}
++#endif
++}
++
++bool CCustomMediaBackground::LoadVideo(const char *pPath, int StorageType)
++{
++	m_IsVideo = true;
++
++#if !defined(CONF_VIDEORECORDER)
++	(void)pPath;
++	(void)StorageType;
++	SetStatus(EStatus::NO_VIDEO_SUPPORT);
++	return false;
++#else
++	char aAbsolutePath[IO_MAX_PATH_LENGTH];
++	ResolveToAbsolute(m_pStorage, pPath, aAbsolutePath, sizeof(aAbsolutePath));
++
++	const int OpenRes = avformat_open_input(&m_pFormatCtx, aAbsolutePath, nullptr, nullptr);
++	if(OpenRes != 0)
++	{
++		SetStatus(EStatus::FAILED_OPEN_VIDEO);
++		return false;
++	}
++	if(avformat_find_stream_info(m_pFormatCtx, nullptr) < 0)
++	{
++		SetStatus(EStatus::FAILED_VIDEO_INFO);
++		return false;
++	}
++
++	m_VideoStream = av_find_best_stream(m_pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
++	if(m_VideoStream < 0)
++	{
++		SetStatus(EStatus::NO_VIDEO_STREAM);
++		return false;
++	}
++
++	const AVStream *pStream = m_pFormatCtx->streams[m_VideoStream];
++	const AVCodec *pCodec = avcodec_find_decoder(pStream->codecpar->codec_id);
++	if(pCodec == nullptr)
++	{
++		SetStatus(EStatus::BAD_VIDEO_CODEC);
++		ClearVideoState();
++		return false;
++	}
++
++	m_pCodecCtx = avcodec_alloc_context3(pCodec);
++	if(m_pCodecCtx == nullptr || avcodec_parameters_to_context(m_pCodecCtx, pStream->codecpar) < 0)
++	{
++		SetStatus(EStatus::FAILED_DECODER_INIT);
++		ClearVideoState();
++		return false;
++	}
++	// Perf (checklist #17): FFmpeg opens decoders with ONE thread by default, so a
++	// 2K source stalled the render thread for the whole decode every frame.
++	// ffbench: 2560x1440 h264 = 14.7 ms/frame single-threaded -> 0.7 ms/frame with
++	// threads. In-game pacing measurement (mc_background_diag) showed 4 threads
++	// beats auto/16 and 1 thread on wall time per decode cycle at 2K, so the
++	// default is 4 (mc_background_threads, 0 = auto). Decode-only change; the game
++	// resolution is never involved.
++	// Note: low-res decoding (AVCodecContext.lowres) is NOT an option here —
++	// FFmpeg 8.1's H.264 decoder reports "maximum value for lowres ... is 0".
++	m_pCodecCtx->thread_count = g_Config.m_McBackgroundThreads;
++	if(avcodec_open2(m_pCodecCtx, pCodec, nullptr) < 0)
++	{
++		SetStatus(EStatus::FAILED_DECODER_INIT);
++		ClearVideoState();
++		return false;
++	}
++
++	m_SrcWidth = m_pCodecCtx->width;
++	m_SrcHeight = m_pCodecCtx->height;
++	if(m_SrcWidth <= 0 || m_SrcHeight <= 0)
++	{
++		SetStatus(EStatus::INVALID_DIMENSIONS);
++		ClearVideoState();
++		return false;
++	}
++
++	// Video decode size: mc_background_video_res, and ONLY that setting.
++	//
++	// This used to be derived from mc_background_fit (the background fit box),
++	// which meant picking "screen size" silently downscaled the source: a
++	// 3000x2000 clip was decoded at 2046x1364 on a 2048x1152 screen, and a 4K
++	// clip was crushed to the screen size too. The fit setting is a
++	// composition/crop aspect and must not touch the decoded resolution, so the
++	// two are now separate:
++	//   mc_background_video_res = 0 (default) -> decode at the source size
++	//                           1..4           -> cap the height (2160/1440/1080/720)
++	// Capping is purely an opt-in performance trade-off, never a screen effect.
++	static constexpr int s_apVideoResHeights[] = {0, 2160, 1440, 1080, 720};
++	const int VideoResIndex = std::clamp(g_Config.m_McBackgroundVideoRes, 0, 4);
++	const int CapHeight = s_apVideoResHeights[VideoResIndex];
++	m_Width = m_SrcWidth;
++	m_Height = m_SrcHeight;
++	if(CapHeight > 0 && m_SrcHeight > CapHeight)
++	{
++		m_Height = CapHeight;
++		m_Width = std::max(1, (int)((int64_t)m_SrcWidth * CapHeight / m_SrcHeight));
++	}
++
++	// Round the upload size up to a power of two on each axis.
++	//
++	// This is the difference between a smooth and an unusable video background.
++	// The OpenGL backend keeps non-power-of-two textures on the CPU-resize path
++	// (see CCommandProcessorFragment_OpenGL::TextureUpdate: when
++	// !m_HasNPOTTextures it calls ResizeImage on every update), so a 2560x1440
++	// frame was resampled to 4096x2048 - about 33 MB of work - on every single
++	// frame. Measured menu frame rate with the same code and clip sizes:
++	//   1024x512  (power of two) -> ~388 fps
++	//   1024x1024 (power of two) -> ~377 fps
++	//   2048x1024 (power of two) -> ~345 fps
++	//    854x480  (not)          -> ~203 fps
++	//   1280x720  (not)          ->  ~16 fps
++	//   2560x1440 (not)          ->   ~4 fps
++	// Sizing the texture to powers of two avoids that path entirely. The video is
++	// decoded into the padded area and the extra border is never sampled, because
++	// Render() maps UVs using the real video rectangle.
++	m_UploadWidth = PowerOfTwoCeil(m_Width);
++	m_UploadHeight = PowerOfTwoCeil(m_Height);
++
++	m_pFrame = av_frame_alloc();
++	m_pFrameRgba = av_frame_alloc();
++	m_pPacket = av_packet_alloc();
++	if(m_pFrame == nullptr || m_pFrameRgba == nullptr || m_pPacket == nullptr)
++	{
++		SetStatus(EStatus::FAILED_FRAME_ALLOC);
++		ClearVideoState();
++		return false;
++	}
++
++	m_pFrameRgba->format = AV_PIX_FMT_RGBA;
++	m_pFrameRgba->width = m_UploadWidth;
++	m_pFrameRgba->height = m_UploadHeight;
++	if(av_frame_get_buffer(m_pFrameRgba, 1) < 0)
++	{
++		SetStatus(EStatus::FAILED_RGBA_ALLOC);
++		ClearVideoState();
++		return false;
++	}
++	// Clear the padding so the never-sampled border cannot show stale pixels.
++	memset(m_pFrameRgba->data[0], 0, (size_t)m_pFrameRgba->linesize[0] * (size_t)m_UploadHeight);
++
++	// Scale the source straight into the padded RGBA frame: the video occupies
++	// the top-left m_Width x m_Height rectangle, the rest is padding.
++	m_pSwsCtx = sws_getContext(m_SrcWidth, m_SrcHeight, m_pCodecCtx->pix_fmt, m_Width, m_Height, AV_PIX_FMT_RGBA,
++		SWS_BILINEAR, nullptr, nullptr, nullptr);
++	if(m_pSwsCtx == nullptr)
++	{
++		SetStatus(EStatus::FAILED_SCALER);
++		ClearVideoState();
++		return false;
++	}
++
++	if(!DecodeNextVideoFrame(true))
++	{
++		SetStatus(EStatus::FAILED_FIRST_FRAME);
++		ClearVideoState();
++		return false;
++	}
++
++	m_IsLoaded = true;
++	SetStatus(EStatus::LOADED_VIDEO);
++	return true;
++#endif
++}
++
++void CCustomMediaBackground::ReloadFromConfig(int Enabled, const char *pPath)
++{
++	char aPath[IO_MAX_PATH_LENGTH];
++	str_copy(aPath, pPath, sizeof(aPath));
++
++	Unload();
++
++	m_LastConfigEnabled = Enabled;
++	str_copy(m_aLastConfigPath, aPath, sizeof(m_aLastConfigPath));
++
++	if(!Enabled)
++	{
++		SetStatus(EStatus::DISABLED);
++		return;
++	}
++	if(aPath[0] == '\0')
++	{
++		SetStatus(EStatus::NO_FILE);
++		return;
++	}
++
++	const int StorageType = fs_is_relative_path(aPath) ? IStorage::TYPE_SAVE : IStorage::TYPE_ABSOLUTE;
++	char aExt[16];
++	ExtensionLower(aPath, aExt, sizeof(aExt));
++
++	bool Success = false;
++	if(IsVideoExtension(aExt))
++		Success = LoadVideo(aPath, StorageType);
++	else
++		Success = LoadImage(aPath, StorageType);
++
++	if(Success)
++		str_copy(m_aLoadedPath, aPath, sizeof(m_aLoadedPath));
++
++	if(g_Config.m_McBackgroundDiag)
++	{
++		char aDiagPath[IO_MAX_PATH_LENGTH];
++		m_pStorage->GetCompletePath(IStorage::TYPE_SAVE, "mcbg_diag.txt", aDiagPath, sizeof(aDiagPath));
++		if(FILE *pFile = fopen(aDiagPath, "a"))
++		{
++			fprintf(pFile, "reload enabled=%d success=%d path=%s status=%d src=%dx%d decode=%dx%d upload=%dx%d video_res=%d fit=%s\n",
++				Enabled, Success ? 1 : 0, aPath, (int)Status(),
++				m_SrcWidth, m_SrcHeight, m_Width, m_Height, m_UploadWidth, m_UploadHeight,
++				g_Config.m_McBackgroundVideoRes, g_Config.m_McBackgroundFit);
++			fclose(pFile);
++		}
++	}
++}
++
++void CCustomMediaBackground::SyncFromConfig(int Enabled, const char *pPath)
++{
++	// Only the decode-resolution setting affects the video decode box. A change
++	// of mc_background_fit must NOT reload the video: that setting is a
++	// composition/crop aspect only, so reloading would needlessly restart
++	// playback whenever the user picks a different fit.
++	const bool ResChanged = m_LastVideoRes != g_Config.m_McBackgroundVideoRes;
++	if(ResChanged)
++		m_LastVideoRes = g_Config.m_McBackgroundVideoRes;
++	if(m_LastConfigEnabled != Enabled || str_comp(m_aLastConfigPath, pPath) != 0)
++		ReloadFromConfig(Enabled, pPath);
++	else if(ResChanged && m_IsVideo && m_IsLoaded)
++		ReloadFromConfig(Enabled, pPath); // re-resolve the video decode box
++}
++
++void CCustomMediaBackground::Update()
++{
++	// diag: count every Update() call (menu render rate) and every call that
++	// actually passes the fps gate, independent of the per-decode counters
++	if(g_Config.m_McBackgroundDiag)
++		DiagCountUpdate();
++
++	if(!m_IsLoaded || !m_IsVideo)
++		return;
++
++	const auto Now = time_get_nanoseconds();
++	if(Now < m_NextFrameTime)
++		return;
++
++	if(g_Config.m_McBackgroundDiag)
++		DiagCountGated();
++
++	int Guard = 0;
++	while(Now >= m_NextFrameTime && Guard < 2)
++	{
++		const auto DecT0 = std::chrono::steady_clock::now();
++		const bool Decoded = DecodeNextVideoFrame(true);
++		if(g_Config.m_McBackgroundDiag)
++			DiagAddDecodeWallMs(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - DecT0).count());
++		if(!Decoded)
++		{
++			SetStatus(EStatus::FAILED_DECODE);
++			m_IsLoaded = false;
++			ClearVideoState();
++			if(m_pGraphics != nullptr && m_Texture.IsValid())
++				m_pGraphics->UnloadTexture(&m_Texture);
++			break;
++		}
++		++Guard;
++	}
++	if(Guard == 2 && Now >= m_NextFrameTime)
++	{
++		// still behind after the 2-frame burst: pause one frame interval honouring
++		// the fps cap, so mc_background_video_fps really bounds decode cost (the
++		// fixed 33 ms jump used to exceed the cap and re-spike the CPU)
++		int JumpMs = CUSTOM_BG_DEFAULT_VIDEO_FRAME_MS;
++		if(const int Fps = g_Config.m_McBackgroundVideoFps; Fps > 0)
++			JumpMs = std::max(JumpMs, (1000 + Fps - 1) / Fps);
++		m_NextFrameTime = Now + std::chrono::milliseconds(JumpMs);
++	}
++}
++
++bool CCustomMediaBackground::Render()
++{
++	const auto RenderT0 = std::chrono::steady_clock::now();
++	if(!m_IsLoaded || m_pGraphics == nullptr || !m_Texture.IsValid())
++		return false;
++
++	// DDNet 19.9 has no CScreenRect/GetScreen() struct-returning overload; the
++	// four-float GetScreen() is the same viewport data (HiDPI aware).
++	float ScreenTLX = 0.0f, ScreenTLY = 0.0f, ScreenBRX = 0.0f, ScreenBRY = 0.0f;
++	m_pGraphics->GetScreen(&ScreenTLX, &ScreenTLY, &ScreenBRX, &ScreenBRY);
++	const float ScreenW = ScreenBRX - ScreenTLX;
++	const float ScreenH = ScreenBRY - ScreenTLY;
++	if(ScreenW <= 0.0f || ScreenH <= 0.0f || m_Width <= 0 || m_Height <= 0)
++		return false;
++
++	// Draw mode (mc_background_mode). The texture may be larger than the video
++	// (power-of-two padding), so UVs start out covering only the real video
++	// rectangle and the padding is never sampled.
++	const float UsedU = m_UploadWidth > 0 ? (float)m_Width / (float)m_UploadWidth : 1.0f;
++	const float UsedV = m_UploadHeight > 0 ? (float)m_Height / (float)m_UploadHeight : 1.0f;
++
++	// Fit box (mc_background_fit): "auto" = screen aspect, or a fixed WxH. This
++	// defines the aspect the background is composed in; the game resolution is
++	// never changed by it.
++	float FitAspect = ScreenW / ScreenH;
++	int FitW = 0;
++	int FitH = 0;
++	if(ParseFitPx(g_Config.m_McBackgroundFit, FitW, FitH))
++		FitAspect = (float)FitW / (float)FitH;
++
++	const int Mode = g_Config.m_McBackgroundMode;
++
++	// ---- how the image meets the screen -------------------------------------
++	//
++	// No mode below may ever leave uncovered (letterbox) area: the screen is
++	// always fully covered by the background. That constraint decides the crop
++	// direction, because for a given video and frame only ONE direction can fill
++	// the screen without bars:
++	//   video wider than the frame  -> the sides overflow   -> crop left/right
++	//   video narrower than the frame -> top/bottom overflow -> crop top/bottom
++	// So the two crop modes are the user's *intent* ("do not lose the sides" vs
++	// "do not lose the top/bottom"); when that intent is geometrically impossible
++	// the other direction is used, because honouring it would produce exactly the
++	// bars this feature forbids. The settings UI shows which one is in effect.
++	//
++	// The crop is always centred, so the loss is equal on both sides.
++	//
++	// 0 = crop top/bottom (keep the whole width, drop the vertical overflow)
++	// 1 = crop left/right (keep the whole height, drop the horizontal overflow)
++	// 2 = stretch (fill the screen, aspect distortion allowed)
++	// 3 = tile (repeat the image, filling the screen)
++	if(Mode == 3) // tile: repeat the image at its natural size
++	{
++		// the material samples "what is behind" a panel; for tiling that is the
++		// whole video image repeated, so expose the single-tile rect
++		m_DisplayU0 = 0.0f;
++		m_DisplayV0 = 0.0f;
++		m_DisplayU1 = UsedU;
++		m_DisplayV1 = UsedV;
++		const float TileW = (float)m_Width;
++		const float TileH = (float)m_Height;
++		m_pGraphics->BlendNormal();
++		m_pGraphics->TextureSet(m_Texture);
++		m_pGraphics->WrapRepeat(); // required so the texture can repeat
++		m_pGraphics->QuadsBegin();
++		m_pGraphics->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
++		// UV 0..1 maps the padded texture; scale it so the repeat period equals
++		// exactly one video image (i.e. UsedU/UsedV per tile).
++		const int CountX = (int)(ScreenW / TileW) + 2;
++		const int CountY = (int)(ScreenH / TileH) + 2;
++		for(int y = 0; y < CountY; ++y)
++		{
++			for(int x = 0; x < CountX; ++x)
++			{
++				const float X = ScreenTLX + (float)x * TileW - std::fmod(ScreenTLX, TileW);
++				const float Y = ScreenTLY + (float)y * TileH - std::fmod(ScreenTLY, TileH);
++				if(X >= ScreenTLX + ScreenW || Y >= ScreenTLY + ScreenH)
++					continue;
++				m_pGraphics->QuadsSetSubset(0.0f, 0.0f, UsedU, UsedV);
++				const IGraphics::CQuadItem Quad(X, Y, TileW, TileH);
++				m_pGraphics->QuadsDrawTL(&Quad, 1);
++			}
++		}
++		m_pGraphics->QuadsEnd();
++		m_pGraphics->WrapNormal();
++		m_pGraphics->TextureClear();
++		if(g_Config.m_McBackgroundDiag)
++			DiagAddRenderMs(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - RenderT0).count());
++		return true;
++	}
++
++	float DstX = ScreenTLX;
++	float DstY = ScreenTLY;
++	float DstW = ScreenW;
++	float DstH = ScreenH;
++	float TopLeftU = 0.0f;
++	float TopLeftV = 0.0f;
++	float BottomRightU = UsedU;
++	float BottomRightV = UsedV;
++
++	if(Mode != 2) // aspect preserving (0 and 1): crop, then cover the screen
++	{
++		const float VideoAspect = (float)m_Width / (float)m_Height;
++		const float ScreenAspect = ScreenW / ScreenH;
++
++		// Keeping the whole width only fills the frame when the video is not wider
++		// than the frame; keeping the whole height only fills when it is not
++		// taller. Exactly one holds, and that one decides the crop direction.
++		if(VideoAspect <= FitAspect)
++		{
++			// keep the whole width, crop the vertical overflow equally
++			const float VisibleV = VideoAspect / FitAspect;
++			const float Crop = (1.0f - VisibleV) * 0.5f;
++			TopLeftV = UsedV * Crop;
++			BottomRightV = UsedV - UsedV * Crop;
++		}
++		else
++		{
++			// keep the whole height, crop the horizontal overflow equally
++			const float VisibleU = FitAspect / VideoAspect;
++			const float Crop = (1.0f - VisibleU) * 0.5f;
++			TopLeftU = UsedU * Crop;
++			BottomRightU = UsedU - UsedU * Crop;
++		}
++
++		// The cropped region now has the composition aspect; cover the screen with
++		// it (this only crops when a manual mc_background_fit aspect differs from
++		// the screen aspect).
++		if(FitAspect > ScreenAspect)
++		{
++			const float Crop = (1.0f - ScreenAspect / FitAspect) * 0.5f;
++			const float Width = BottomRightU - TopLeftU;
++			TopLeftU += Width * Crop;
++			BottomRightU -= Width * Crop;
++		}
++		else if(FitAspect < ScreenAspect)
++		{
++			const float Crop = (1.0f - FitAspect / ScreenAspect) * 0.5f;
++			const float Height = BottomRightV - TopLeftV;
++			TopLeftV += Height * Crop;
++			BottomRightV -= Height * Crop;
++		}
++	}
++	// Mode 2 (stretch) keeps the whole texture mapped onto the whole screen.
++
++	// remember the mapping of the visible sub-rect of the texture (exposed via
++	// DisplayedUvRect() for anything that needs to know what is behind a panel)
++	m_DisplayU0 = TopLeftU;
++	m_DisplayV0 = TopLeftV;
++	m_DisplayU1 = BottomRightU;
++	m_DisplayV1 = BottomRightV;
++
++	m_pGraphics->BlendNormal();
++	m_pGraphics->TextureSet(m_Texture);
++	m_pGraphics->WrapClamp();
++	m_pGraphics->QuadsBegin();
++	m_pGraphics->QuadsSetSubset(TopLeftU, TopLeftV, BottomRightU, BottomRightV);
++	m_pGraphics->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
++	const IGraphics::CQuadItem Quad(DstX, DstY, DstW, DstH);
++	m_pGraphics->QuadsDrawTL(&Quad, 1);
++	m_pGraphics->QuadsEnd();
++	m_pGraphics->WrapNormal();
++	m_pGraphics->TextureClear();
++	if(g_Config.m_McBackgroundDiag)
++		DiagAddRenderMs(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - RenderT0).count());
++	return true;
++}
+diff --git a/src/game/client/components/custom_background.h b/src/game/client/components/custom_background.h
+new file mode 100644
+index 0000000..5281843
+--- /dev/null
++++ b/src/game/client/components/custom_background.h
+@@ -0,0 +1,138 @@
++#ifndef GAME_CLIENT_COMPONENTS_CUSTOM_BACKGROUND_H
++#define GAME_CLIENT_COMPONENTS_CUSTOM_BACKGROUND_H
++
++#include <base/types.h>
++
++#include <engine/graphics.h>
++#include <engine/storage.h>
++
++#include <chrono>
++#include <cstdint>
++#include <vector>
++
++struct AVCodecContext;
++struct AVFormatContext;
++struct AVFrame;
++struct AVPacket;
++struct SwsContext;
++
++/**
++ * Custom media background ("My custom" settings page).
++ *
++ * Loads a user provided PNG image or video file (mp4, ...) and renders it
++ * as a fullscreen, aspect-correct ("cover") background. It is purely a
++ * local visual feature and does not touch any gameplay relevant state.
++ */
++class CCustomMediaBackground
++{
++public:
++	enum class EStatus
++	{
++		DISABLED,
++		NO_FILE,
++		LOADED_IMAGE,
++		LOADED_VIDEO,
++		FAILED_IMAGE,
++		FAILED_OPEN_VIDEO,
++		FAILED_VIDEO_INFO,
++		NO_VIDEO_STREAM,
++		BAD_VIDEO_CODEC,
++		FAILED_DECODER_INIT,
++		INVALID_DIMENSIONS,
++		FAILED_FRAME_ALLOC,
++		FAILED_RGBA_ALLOC,
++		FAILED_SCALER,
++		FAILED_FIRST_FRAME,
++		FAILED_DECODE,
++		NO_VIDEO_SUPPORT,
++	};
++
++private:
++	IGraphics *m_pGraphics = nullptr;
++	IStorage *m_pStorage = nullptr;
++
++	IGraphics::CTextureHandle m_Texture;
++	// Dimensions of the currently allocated texture, so the video path can tell
++	// whether an in-place update is possible or a new allocation is needed.
++	int m_TextureWidth = 0;
++	int m_TextureHeight = 0;
++	// Texture size rounded up to powers of two. The OpenGL backend CPU-resizes
++	// non-power-of-two textures on every update, which is what made large videos
++	// unusable; the padding is never sampled (see Render()'s UV mapping).
++	int m_UploadWidth = 0;
++	int m_UploadHeight = 0;
++	// m_Width/m_Height: real video dimensions after the fit-box downscale
++	int m_Width = 0;
++	int m_Height = 0;
++	// m_SrcWidth/m_SrcHeight: codec (decode source) dimensions
++	int m_SrcWidth = 0;
++	int m_SrcHeight = 0;
++
++	bool m_IsVideo = false;
++	bool m_IsLoaded = false;
++	bool m_HasError = false;
++	EStatus m_Status = EStatus::DISABLED;
++	char m_aLoadedPath[IO_MAX_PATH_LENGTH] = "";
++
++	int m_LastConfigEnabled = -1;
++	char m_aLastConfigPath[IO_MAX_PATH_LENGTH] = "";
++	// last seen mc_background_video_res value (the video decode box follows it,
++	// NOT mc_background_fit: the fit setting is only a composition/crop aspect
++	// and must never downscale the source video)
++	int m_LastVideoRes = -1;
++	// UV rectangle of the texture that the last Render() mapped onto the whole
++	// screen. The interface material samples this to show "what is behind" a panel.
++	float m_DisplayU0 = 0.0f;
++	float m_DisplayV0 = 0.0f;
++	float m_DisplayU1 = 1.0f;
++	float m_DisplayV1 = 1.0f;
++
++	// video playback state
++	AVFormatContext *m_pFormatCtx = nullptr;
++	AVCodecContext *m_pCodecCtx = nullptr;
++	AVFrame *m_pFrame = nullptr;
++	AVFrame *m_pFrameRgba = nullptr;
++	AVPacket *m_pPacket = nullptr;
++	SwsContext *m_pSwsCtx = nullptr;
++	int m_VideoStream = -1;
++	int64_t m_LastVideoPts = 0;
++	std::chrono::nanoseconds m_NextFrameTime{0};
++	std::vector<uint8_t> m_vUploadBuffer;
++
++	void SetStatus(EStatus Status);
++	void ClearVideoState();
++	bool LoadImage(const char *pPath, int StorageType);
++	bool LoadVideo(const char *pPath, int StorageType);
++	bool DecodeFirstFrameFromFile(const char *pAbsolutePath);
++	bool DecodeNextVideoFrame(bool LoopOnEof);
++	bool UploadCurrentVideoFrame(int DurationMs);
++	void ReloadFromConfig(int Enabled, const char *pPath);
++
++public:
++	~CCustomMediaBackground();
++
++	void Init(IGraphics *pGraphics, IStorage *pStorage);
++	void SyncFromConfig(int Enabled, const char *pPath);
++	// resolve mc_background_fit into a pixel box (auto = screen size, HiDPI aware)
++	void ResolveFitBox(int &FitW, int &FitH) const;
++	void Update();
++	bool Render();
++	void Unload();
++
++	bool HasError() const { return m_HasError; }
++	bool IsLoaded() const { return m_IsLoaded; }
++	EStatus Status() const { return m_Status; }
++	int SrcWidth() const { return m_SrcWidth; }
++	int SrcHeight() const { return m_SrcHeight; }
++	int DecodeWidth() const { return m_Width; }
++	int DecodeHeight() const { return m_Height; }
++	bool IsVideo() const { return m_IsVideo; }
++	// texture currently holding the background, and the UV rect of it that maps
++	// onto the whole screen (the sub-rect actually visible after fit/crop)
++	IGraphics::CTextureHandle TextureHandle() const { return m_Texture; }
++	void DisplayedUvRect(float &U0, float &V0, float &U1, float &V1) const;
++	// translated at call time so it follows the current game language
++	const char *StatusText() const;
++};
++
++#endif
+diff --git a/src/game/client/components/menus.cpp b/src/game/client/components/menus.cpp
+index 6cd6645..7154431 100644
+--- a/src/game/client/components/menus.cpp
++++ b/src/game/client/components/menus.cpp
+@@ -130,6 +130,11 @@ int CMenus::DoButton_Menu(CButtonContainer *pButtonContainer, const char *pText,
+ 		Color = ColorRGBA(0.6f, 0.6f, 0.6f, 0.5f);
+ 	Color.a *= Ui()->ButtonColorMul(pButtonContainer);
+ 
++	// Global opacity of the black panel behind rows/options (mc_ui_panel_alpha,
++	// 0..25). 25 is the built-in default these panels are authored with, so the
++	// factor is exactly 1.0 and nothing changes unless the user adjusts it.
++	Color.a *= (float)std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 25.0f;
++
+ 	pRect->Draw(Color, Corners, Rounding);
+ 
+ 	if(pImageName)
+@@ -768,7 +773,7 @@ void CMenus::RenderLoading(const char *pCaption, const char *pContent, int Incre
+ 		// the menu background is not loaded yet.
+ 		return;
+ 	}
+-	if(!GameClient()->m_MenuBackground.Render())
++	if(!RenderCustomMenuBackground() && !GameClient()->m_MenuBackground.Render())
+ 	{
+ 		RenderBackground();
+ 	}
+@@ -853,6 +858,8 @@ void CMenus::OnInterfacesInit(CGameClient *pClient)
+ 
+ void CMenus::OnInit()
+ {
++	m_CustomBackground.Init(Graphics(), Storage());
++
+ 	if(g_Config.m_ClShowWelcome)
+ 	{
+ 		m_Popup = POPUP_LANGUAGE;
+@@ -1007,6 +1014,35 @@ bool CMenus::CanDisplayWarning() const
+ 	return m_Popup == POPUP_NONE;
+ }
+ 
++void CMenus::RenderHideGuiButton(const CUIRect &Screen)
++{
++	// Small square in the free part of the start menu's bottom-right corner: the
++	// version label (bottom) and the console button end 50px above the edge and
++	// 50px further left, so this overlaps neither. Same Font Awesome icon family
++	// as the rest of the menu (FontIcon::EYE / EYE_SLASH), so it blends into the
++	// game's own style.
++	constexpr float Size = 30.0f;
++	constexpr float MarginRight = 12.0f;
++	constexpr float MarginBottom = 50.0f;
++
++	CUIRect Button;
++	Button.x = Screen.x + Screen.w - Size - MarginRight;
++	Button.y = Screen.y + Screen.h - Size - MarginBottom;
++	Button.w = Size;
++	Button.h = Size;
++
++	static CButtonContainer s_HideGuiButton;
++	// eye-slash = "hide the interface", eye = "bring it back"
++	const char *pIcon = m_HideGui ? FontIcon::EYE : FontIcon::EYE_SLASH;
++	// slightly stronger panel while hidden so the only remaining control stays
++	// findable against a bright background
++	const float PanelAlpha = m_HideGui ? 0.45f : 0.25f;
++	if(Ui()->DoButton_FontIcon(&s_HideGuiButton, pIcon, 0, &Button, BUTTONFLAG_LEFT, IGraphics::CORNER_ALL, true, ColorRGBA(0.0f, 0.0f, 0.0f, PanelAlpha)))
++	{
++		m_HideGui = !m_HideGui;
++	}
++}
++
+ void CMenus::Render()
+ {
+ 	Ui()->MapScreen();
+@@ -1068,7 +1104,7 @@ void CMenus::Render()
+ 	}
+ 	else
+ 	{
+-		if(!GameClient()->m_MenuBackground.Render())
++		if(!RenderCustomMenuBackground() && !GameClient()->m_MenuBackground.Render())
+ 		{
+ 			RenderBackground();
+ 		}
+@@ -1083,6 +1119,32 @@ void CMenus::Render()
+ 		Screen.Margin(10.0f, &Screen);
+ 	}
+ 
++	// "Hide all GUI" / immersive view (Blue Archive style home button). Available
++	// on the start menu only: that is the "home page" showing the background, and
++	// it is also the only menu screen whose bottom-right corner is free (on the
++	// settings screen the category list owns that corner). Restricted to offline
++	// with no popup, so a hidden interface can never hide a loading, connecting
++	// or warning dialog.
++	const bool HideGuiAvailable = ClientState == IClient::STATE_OFFLINE && m_Popup == POPUP_NONE && m_ShowStart;
++	if(!HideGuiAvailable)
++		m_HideGui = false;
++	if(m_HideGui)
++	{
++		// Every other menu element is skipped, which also means no invisible
++		// button stays clickable - only the toggle is registered with the UI.
++		// Escape is consumed here as a second way out, so it restores the
++		// interface instead of closing/deactivating the menu.
++		if(Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE))
++		{
++			m_HideGui = false;
++		}
++		else
++		{
++			RenderHideGuiButton(Screen);
++			return;
++		}
++	}
++
+ 	switch(ClientState)
+ 	{
+ 	case IClient::STATE_QUITTING:
+@@ -1201,6 +1263,10 @@ void CMenus::Render()
+ 		break;
+ 	}
+ 
++	// Immersive view toggle, drawn on top of whichever menu page is showing.
++	if(HideGuiAvailable)
++		RenderHideGuiButton(Screen);
++
+ 	Ui()->RenderPopupMenus();
+ 
+ 	// Prevent UI elements from being hovered while a key reader is active
+@@ -2391,6 +2457,9 @@ void CMenus::SetActive(bool Active)
+ 		Ui()->SetActiveItem(nullptr);
+ 	}
+ 	m_MenuActive = Active;
++	// never leave the interface hidden once the menu is closed
++	if(!Active)
++		m_HideGui = false;
+ 	if(!m_MenuActive)
+ 	{
+ 		if(m_NeedSendinfo)
+@@ -2547,9 +2616,18 @@ void CMenus::UpdateColors()
+ {
+ 	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
+ 
+-	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f);
+-	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);
+-	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f);
++	// Global opacity of the black menu panels (the "shadows" the options sit on).
++	// The tab buttons and the large box behind the settings content are all built
++	// from the colours below, so scaling them here covers every panel of the menu
++	// chrome at once; the section boxes and option rows drawn by this file's own
++	// pages apply mc_ui_panel_alpha as well. 25 is the built-in default, so the
++	// factor is exactly 1.0 and nothing changes unless the user adjusts it.
++	// This runs every frame (see the caller), so the setting applies live.
++	const float PanelAlpha = std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 25.0f;
++
++	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f * PanelAlpha);
++	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f * PanelAlpha);
++	ms_ColorTabbarHoverOutgame = ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f * PanelAlpha);
+ 
+ 	const float ColorIngameScaleI = 0.5f;
+ 	const float ColorIngameScaleA = 0.2f;
+diff --git a/src/game/client/components/menus.h b/src/game/client/components/menus.h
+index 74a80fd..077fd72 100644
+--- a/src/game/client/components/menus.h
++++ b/src/game/client/components/menus.h
+@@ -16,7 +16,9 @@
+ 
+ #include <game/client/component.h>
+ #include <game/client/components/community_icons.h>
++#include <game/client/components/custom_background.h>
+ #include <game/client/components/mapimages.h>
++#include <game/client/components/wallpaper_engine.h>
+ #include <game/client/components/menus_ingame_touch_controls.h>
+ #include <game/client/components/menus_settings_controls.h>
+ #include <game/client/components/menus_start.h>
+@@ -685,6 +687,7 @@ public:
+ 		SETTINGS_SOUND,
+ 		SETTINGS_DDNET,
+ 		SETTINGS_ASSETS,
++		SETTINGS_MYCUSTOM, // module pages (Background etc.)
+ 
+ 		SETTINGS_LENGTH,
+ 	};
+@@ -825,6 +828,21 @@ private:
+ 	friend CMenusSettingsControls;
+ 	CMenusStart m_MenusStart;
+ 
++	// My custom: local custom background (png/mp4), visual only
++	CCustomMediaBackground m_CustomBackground;
++	bool RenderCustomMenuBackground();
++	void RenderSettingsMyCustom(CUIRect MainView);
++
++	// Immersive view (Blue Archive style home button): hides every bit of menu
++	// GUI except the toggle button itself, so only the background is left.
++	// Runtime-only on purpose - it is never saved, so a fresh start always shows
++	// the interface and the player can never end up stuck without it.
++	bool m_HideGui = false;
++	void RenderHideGuiButton(const CUIRect &Screen);
++
++	// Background: discover and select a Wallpaper Engine wallpaper.
++	CWallpaperEngine m_WallpaperEngine;
++
+ 	static int GhostlistFetchCallback(const CFsFileInfo *pInfo, int IsDir, int StorageType, void *pUser);
+ 
+ 	// found in menus_ingame.cpp
+diff --git a/src/game/client/components/menus_settings.cpp b/src/game/client/components/menus_settings.cpp
+index a0c4fa2..773db62 100644
+--- a/src/game/client/components/menus_settings.cpp
++++ b/src/game/client/components/menus_settings.cpp
+@@ -1443,7 +1443,8 @@ void CMenus::RenderSettings(CUIRect MainView)
+ 		Localize("Graphics"),
+ 		Localize("Sound"),
+ 		Localize("DDNet"),
+-		Localize("Assets")};
++		Localize("Assets"),
++		Localize("Modules")};
+ 	static CButtonContainer s_aTabButtons[SETTINGS_LENGTH];
+ 
+ 	for(int i = 0; i < SETTINGS_LENGTH; i++)
+@@ -1507,6 +1508,11 @@ void CMenus::RenderSettings(CUIRect MainView)
+ 		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_ASSETS);
+ 		RenderSettingsCustom(MainView);
+ 	}
++	else if(g_Config.m_UiSettingsPage == SETTINGS_MYCUSTOM)
++	{
++		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_ASSETS);
++		RenderSettingsMyCustom(MainView);
++	}
+ 	else
+ 	{
+ 		dbg_assert_failed("ui_settings_page invalid");
+diff --git a/src/game/client/components/menus_settings_mycustom.cpp b/src/game/client/components/menus_settings_mycustom.cpp
+new file mode 100644
+index 0000000..b8c071f
+--- /dev/null
++++ b/src/game/client/components/menus_settings_mycustom.cpp
+@@ -0,0 +1,617 @@
++/* Background settings tab (formerly "My custom"): the custom background
++ * (png/jpg/mp4 or a Wallpaper Engine wallpaper). Purely local visual feature:
++ * it never touches gameplay, network or prediction. */
++#include "menus.h"
++
++#include <base/fs.h>
++#include <base/str.h>
++
++#include <engine/font_icons.h>
++#include <engine/shared/config.h>
++#include <engine/textrender.h>
++
++#include <game/client/gameclient.h>
++#include <game/client/ui.h>
++#include <game/client/ui_scrollregion.h>
++#include <game/localization.h>
++
++#include <algorithm>
++#include <cstdio>
++#include <string>
++#include <vector>
++
++namespace
++{
++	// Background files live in a folder called "Background" directly inside the
++	// save directory (i.e. next to the config files, e.g. %APPDATA%\DDNet\Background).
++	const char *CUSTOM_BG_FOLDER = "Background";
++
++	std::vector<std::string> s_vBackgroundFiles;
++	bool s_BackgroundFilesScanned = false;
++
++	const char *ExtensionOf(const char *pPath)
++	{
++		const char *pDot = nullptr;
++		for(const char *p = pPath; *p != '\0'; ++p)
++		{
++			if(*p == '.')
++				pDot = p;
++		}
++		return pDot == nullptr ? "" : pDot + 1;
++	}
++
++	bool IsSupportedBackgroundExtension(const char *pExt)
++	{
++		static const char *apExts[] = {
++			// images (png is decoded by the engine, everything else through FFmpeg —
++			// this is what makes jpg/jpeg usable as a background)
++			"png", "jpg", "jpeg", "jpe", "jfif", "bmp", "webp", "gif", "tif", "tiff", "avif",
++			// videos
++			"mp4", "mkv", "webm", "mov", "avi", "m4v", "mpg", "mpeg", "flv", "wmv", "ts", "3gp"};
++		for(const char *pExtCandidate : apExts)
++		{
++			if(str_comp(pExt, pExtCandidate) == 0)
++				return true;
++		}
++		return false;
++	}
++
++	int CustomBackgroundScanCallback(const char *pFilename, int IsDir, int StorageType, void *pUser)
++	{
++		(void)StorageType;
++		(void)pUser;
++		if(IsDir)
++			return 0;
++		if(!IsSupportedBackgroundExtension(ExtensionOf(pFilename)))
++			return 0;
++
++		char aBuf[IO_MAX_PATH_LENGTH];
++		str_format(aBuf, sizeof(aBuf), "%s/%s", CUSTOM_BG_FOLDER, pFilename);
++		s_vBackgroundFiles.emplace_back(aBuf);
++		return 0;
++	}
++
++	void ScanCustomBackgroundFiles(IStorage *pStorage)
++	{
++		s_BackgroundFilesScanned = true;
++		s_vBackgroundFiles.clear();
++
++		pStorage->CreateFolder(CUSTOM_BG_FOLDER, IStorage::TYPE_SAVE);
++		pStorage->ListDirectory(IStorage::TYPE_SAVE, CUSTOM_BG_FOLDER, CustomBackgroundScanCallback, nullptr);
++	}
++
++	// Accordion state for the resolution picker (click to expand, click to close).
++	bool s_FitExpanded = false;
++	// Accordion state for the display-mode list (cover / contain / ...).
++	bool s_ModeExpanded = false;
++	// Accordion state for the video decode-resolution list.
++	bool s_ResExpanded = false;
++	// Accordion state for the Wallpaper Engine wallpaper list.
++	bool s_WeListExpanded = false;
++
++	const char *const apFitPresets[] = {
++		"1920x1080", "2560x1440", "3840x2160", "5760x3240",
++		"1920x1440", "2560x1920", "3840x2880", "5760x4320"};
++	constexpr int FitPresetCount = sizeof(apFitPresets) / sizeof(apFitPresets[0]);
++}
++
++/**
++ * Renders the custom menu background if it is enabled and loaded,
++ * returns whether anything was rendered.
++ */
++bool CMenus::RenderCustomMenuBackground()
++{
++	m_CustomBackground.SyncFromConfig(g_Config.m_McMenuBackground, g_Config.m_McBackgroundPath);
++	if(!g_Config.m_McMenuBackground)
++		return false;
++	m_CustomBackground.Update();
++	return m_CustomBackground.Render();
++}
++
++void CMenus::RenderSettingsMyCustom(CUIRect MainView)
++{
++	// compact sizes, identical to the TClient settings page
++	constexpr float FontSize = 14.0f;
++	constexpr float EditBoxFontSize = 12.0f;
++	constexpr float LineSize = 20.0f;
++	constexpr float HeadlineFontSize = 20.0f;
++	constexpr float HeadlineHeight = 20.0f;
++	constexpr float Margin = 10.0f;
++	constexpr float MarginSmall = 5.0f;
++
++	// The black panel colour used by this page's section boxes and rows, driven by
++	// mc_ui_panel_alpha (0..25, where 25 = the engine's authored 0.25 alpha) so
++	// the "shadow" behind the options is user adjustable.
++	const ColorRGBA PanelColor(0.0f, 0.0f, 0.0f, std::clamp(g_Config.m_McUiPanelAlpha, 0, 25) / 100.0f);
++
++	// Expand/collapse indicator of the accordion rows, drawn at the right end of
++	// the header button.
++	//
++	// It is a Font Awesome glyph, so it MUST be drawn with the icon font preset:
++	// gluing it onto a normal label (str_format("%s  %s", text, FontIcon::...))
++	// renders a missing-glyph box instead of the arrow, because a button label is
++	// drawn with the default font.
++	const auto DrawExpandArrow = [this](CUIRect Rect, bool Expanded) {
++		CUIRect Arrow;
++		Rect.VSplitRight(24.0f, nullptr, &Arrow);
++		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
++		TextRender()->SetRenderFlags(ETextRenderFlags::TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH | ETextRenderFlags::TEXT_RENDER_FLAG_NO_X_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_Y_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_PIXEL_ALIGNMENT | ETextRenderFlags::TEXT_RENDER_FLAG_NO_OVERSIZE);
++		Ui()->DoLabel(&Arrow, Expanded ? FontIcon::CHEVRON_UP : FontIcon::CHEVRON_DOWN, 14.0f, TEXTALIGN_MC);
++		TextRender()->SetRenderFlags(0);
++		TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
++	};
++
++	// ==========================================================================
++	// 模块子栏：设置 → 「模块(Modules)」主栏 → 每个模块一个子栏。
++	// 所有模块（本仓库自带或由模块安装器装进来的）都挂在这一张表下：
++	//   新增模块 = s_aModuleTabs 加一行 + 下面加一个 `if(s_ActiveModuleTab == N)` 分支。
++	// ==========================================================================
++	static const struct
++	{
++		const char *pId;
++		const char *pName;
++	} s_aModuleTabs[] = {
++		{"background", "Background"},
++	};
++	constexpr int ModuleTabCount = (int)(sizeof(s_aModuleTabs) / sizeof(s_aModuleTabs[0]));
++	static int s_ActiveModuleTab = 0;
++	{
++		CUIRect ModuleBar;
++		MainView.HSplitTop(30.0f, &ModuleBar, &MainView);
++		MainView.HSplitTop(6.0f, nullptr, &MainView);
++		static CButtonContainer s_aModuleTabButtons[8];
++		for(int i = 0; i < ModuleTabCount; ++i)
++		{
++			CUIRect Tab;
++			ModuleBar.VSplitLeft(150.0f, &Tab, &ModuleBar);
++			if(DoButton_MenuTab(&s_aModuleTabButtons[i], Localize(s_aModuleTabs[i].pName), s_ActiveModuleTab == i, &Tab, IGraphics::CORNER_ALL))
++				s_ActiveModuleTab = i;
++			ModuleBar.VSplitLeft(4.0f, nullptr, &ModuleBar);
++		}
++	}
++
++	if(s_ActiveModuleTab == 0) // 模块：背景
++	{
++	// refresh the file list before layout so the file section height is known
++	if(!s_BackgroundFilesScanned)
++		ScanCustomBackgroundFiles(Storage());
++
++	// Wallpaper Engine list is only scanned when that source is actually selected,
++	// so the Steam/workshop folders are never touched for users who don't use it.
++	const bool UseWallpaperEngine = g_Config.m_McBackgroundSource == 1;
++	if(UseWallpaperEngine)
++		m_WallpaperEngine.Scan();
++
++	static CScrollRegion s_ScrollRegion;
++	CScrollRegionParams ScrollParams;
++	ScrollParams.m_ScrollUnit = 60.0f;
++	ScrollParams.m_ForceShowScrollbar = true;
++	ScrollParams.m_ScrollbarMargin = 5.0f;
++	s_ScrollRegion.Begin(&MainView, &ScrollParams);
++	MainView.VSplitRight(5.0f, &MainView, nullptr); // padding for scrollbar
++	MainView.VSplitLeft(5.0f, nullptr, &MainView); // padding for scrollbar
++
++	CUIRect Column = MainView;
++	char aBuf[256];
++
++	// ***** Section: source + settings ***** //
++	{
++		// rows: source switch + 2 checkboxes + (file row OR we list toggle)
++		// + fps + fit accordion (+ expanded rows) + status + buttons
++		const float ModeRows = s_ModeExpanded ? 4.0f : 0.0f;
++		const float ResRows = s_ResExpanded ? 5.0f : 0.0f;
++		const float FitRows = s_FitExpanded ? (float)(FitPresetCount + 1) : 1.0f;
++		// the "effective crop direction" hint only shows for the two crop modes
++		const bool ShowCropHint = std::clamp(g_Config.m_McBackgroundMode, 0, 3) <= 1 &&
++					  m_CustomBackground.SrcWidth() > 0 && m_CustomBackground.SrcHeight() > 0;
++		const float HintRows = ShowCropHint ? 1.0f : 0.0f;
++		// source + 2 checkboxes + file + fps + fit header + video res + mode
++		// + black overlay + title toggle + status + buttons
++		constexpr float BaseRows = 1.0f + 2.0f + 1.0f + 1.0f + 1.0f + 1.0f + 1.0f + 1.0f + 1.0f + 2.0f;
++		const float BoxHeight = Margin + HeadlineHeight + MarginSmall + LineSize * (BaseRows + FitRows + ModeRows + ResRows + HintRows) + Margin;
++		CUIRect Box;
++		Column.HSplitTop(BoxHeight, &Box, &Column);
++		if(!s_ScrollRegion.AddRect(Box))
++		{
++			// box scrolled out of view: only its scroll extent was registered
++		}
++		else
++		{
++		Box.Draw(PanelColor, IGraphics::CORNER_ALL, 10.0f);
++
++		CUIRect Content = Box;
++		Content.HSplitTop(Margin, nullptr, &Content);
++		CUIRect Headline;
++		Content.HSplitTop(HeadlineHeight, &Headline, &Content);
++		Ui()->DoLabel(&Headline, Localize("Background"), HeadlineFontSize, TEXTALIGN_ML);
++		Content.HSplitTop(MarginSmall, nullptr, &Content);
++
++		// Where the background comes from: your own file, or Wallpaper Engine.
++		// Both feed the same pipeline, so this is a source choice, not two tabs.
++		CUIRect SourceRow;
++		Content.HSplitTop(LineSize, &SourceRow, &Content);
++		CUIRect SourceLabel;
++		SourceRow.VSplitLeft(90.0f, &SourceLabel, &SourceRow);
++		Ui()->DoLabel(&SourceLabel, Localize("Source"), FontSize, TEXTALIGN_ML);
++		static CButtonContainer s_aSourceIds[2];
++		static const char *const apSourceNames[] = {"Custom file", "Wallpaper Engine"};
++		const float SourceWidth = SourceRow.w / 2.0f;
++		for(int i = 0; i < 2; ++i)
++		{
++			CUIRect Slot;
++			SourceRow.VSplitLeft(SourceWidth, &Slot, &SourceRow);
++			if(DoButton_Menu(&s_aSourceIds[i], Localize(apSourceNames[i]), g_Config.m_McBackgroundSource == i ? 1 : 0, &Slot))
++			{
++				g_Config.m_McBackgroundSource = i;
++				// switching to Wallpaper Engine opens its list right away
++				if(i == 1)
++					s_WeListExpanded = true;
++			}
++		}
++
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuBackground, Localize("Show custom background on the main menu"), &g_Config.m_McMenuBackground, &Content, LineSize);
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McGameBackground, Localize("Show custom background on the entity layer (in game)"), &g_Config.m_McGameBackground, &Content, LineSize);
++
++		if(!UseWallpaperEngine)
++		{
++			// background file path
++			CUIRect PathRow;
++			Content.HSplitTop(LineSize, &PathRow, &Content);
++			CUIRect PathLabel, PathBox;
++			PathRow.VSplitLeft(60.0f, &PathLabel, &PathBox);
++			Ui()->DoLabel(&PathLabel, Localize("File:"), FontSize, TEXTALIGN_ML);
++			static CLineInput s_PathInput;
++			s_PathInput.SetBuffer(g_Config.m_McBackgroundPath, sizeof(g_Config.m_McBackgroundPath));
++			s_PathInput.SetEmptyText(Localize("C:/path/to/background.png, .jpg or .mp4"));
++			Ui()->DoEditBox(&s_PathInput, &PathBox, EditBoxFontSize);
++		}
++		else
++		{
++			// collapsed list of Wallpaper Engine wallpapers
++			CUIRect WeToggle;
++			Content.HSplitTop(LineSize, &WeToggle, &Content);
++			const auto &vWallpapers = m_WallpaperEngine.Wallpapers();
++			const char *pSelectedName = Localize("none selected");
++			if(g_Config.m_McWePath[0] != '\0')
++			{
++				const auto *pFound = m_WallpaperEngine.Find(g_Config.m_McWePath);
++				if(pFound != nullptr)
++					pSelectedName = pFound->m_Title.c_str();
++				else
++					pSelectedName = g_Config.m_McWePath;
++			}
++			str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Wallpaper"), pSelectedName);
++			static CButtonContainer s_WeToggleId;
++			if(DoButton_Menu(&s_WeToggleId, aBuf, s_WeListExpanded ? 1 : 0, &WeToggle))
++				s_WeListExpanded = !s_WeListExpanded;
++			DrawExpandArrow(WeToggle, s_WeListExpanded);
++			if(vWallpapers.empty())
++			{
++				CUIRect EmptyRow;
++				Content.HSplitTop(LineSize, &EmptyRow, &Content);
++				const std::string &Error = m_WallpaperEngine.LastError();
++				Ui()->DoLabel(&EmptyRow, Error.empty() ? Localize("No video or image wallpapers found.") : Error.c_str(), FontSize, TEXTALIGN_ML);
++			}
++		}
++
++		// video frame rate cap: slider AND numeric input box side by side, so
++		// the value can be dragged quickly or typed exactly.
++		CUIRect FpsRow;
++		Content.HSplitTop(LineSize, &FpsRow, &Content);
++		CUIRect FpsBoxRect;
++		FpsRow.VSplitRight(56.0f, &FpsRow, &FpsBoxRect);
++		FpsRow.VSplitRight(MarginSmall, &FpsRow, nullptr);
++		Ui()->DoScrollbarOption(&g_Config.m_McBackgroundVideoFps, &g_Config.m_McBackgroundVideoFps, &FpsRow, Localize("Video frame rate (0 = source)"), 0, 120, &CUi::ms_LinearScrollbarScale, 0u, " fps");
++		static CLineInputNumber s_FpsInput;
++		static int s_FpsShown = -1;
++		if(!s_FpsInput.IsActive() && s_FpsShown != g_Config.m_McBackgroundVideoFps)
++		{
++			s_FpsInput.SetInteger(g_Config.m_McBackgroundVideoFps);
++			s_FpsShown = g_Config.m_McBackgroundVideoFps;
++		}
++		Ui()->DoEditBox(&s_FpsInput, &FpsBoxRect, EditBoxFontSize);
++		if(!s_FpsInput.IsActive())
++		{
++			int Value = s_FpsInput.GetInteger();
++			Value = std::clamp(Value, 0, 120);
++			if(Value != g_Config.m_McBackgroundVideoFps)
++				g_Config.m_McBackgroundVideoFps = Value;
++			s_FpsShown = g_Config.m_McBackgroundVideoFps;
++		}
++
++		// background fit: an accordion (click the header to expand, click a
++		// preset to pick it, click the header again to collapse) instead of a
++		// cycling button — this is what the game's own lists do.
++		CUIRect FitHeaderRow;
++		Content.HSplitTop(LineSize, &FitHeaderRow, &Content);
++		const char *pCurrentFit = g_Config.m_McBackgroundFit[0] == '\0' ? "auto" : g_Config.m_McBackgroundFit;
++		char aFitButton[128];
++		str_format(aFitButton, sizeof(aFitButton), "%s", pCurrentFit);
++		CUIRect FitLabel, FitButton;
++		FitHeaderRow.VSplitLeft(150.0f, &FitLabel, &FitButton);
++		Ui()->DoLabel(&FitLabel, Localize("Background fit"), FontSize, TEXTALIGN_ML);
++		static CButtonContainer s_FitButtonId;
++		if(DoButton_Menu(&s_FitButtonId, aFitButton, s_FitExpanded ? 1 : 0, &FitButton))
++			s_FitExpanded = !s_FitExpanded;
++		DrawExpandArrow(FitButton, s_FitExpanded);
++		GameClient()->m_Tooltips.DoToolTip(&s_FitButtonId, &FitButton, Localize("Expand to choose the composition aspect (crop reference); it never changes the video's decode resolution"));
++
++		if(s_FitExpanded)
++		{
++			char aScreenFit[32];
++			str_format(aScreenFit, sizeof(aScreenFit), "%dx%d", g_Config.m_GfxScreenWidth, g_Config.m_GfxScreenHeight);
++			static CButtonContainer s_aFitIds[FitPresetCount + 1];
++			CUIRect FitSlot;
++			Content.HSplitTop(LineSize, &FitSlot, &Content);
++			if(s_ScrollRegion.AddRect(FitSlot))
++			{
++				if(DoButton_Menu(&s_aFitIds[0], Localize("auto (detect screen)"), str_comp(pCurrentFit, "auto") == 0 ? 1 : 0, &FitSlot))
++					str_copy(g_Config.m_McBackgroundFit, "auto", sizeof(g_Config.m_McBackgroundFit));
++			}
++			for(int i = 0; i < FitPresetCount; ++i)
++			{
++				Content.HSplitTop(LineSize, &FitSlot, &Content);
++				if(!s_ScrollRegion.AddRect(FitSlot))
++					continue;
++				const bool IsScreenSize = str_comp(pCurrentFit, aScreenFit) == 0 && str_comp(apFitPresets[i], aScreenFit) == 0;
++				if(DoButton_Menu(&s_aFitIds[i + 1], apFitPresets[i], (str_comp(pCurrentFit, apFitPresets[i]) == 0 || IsScreenSize) ? 1 : 0, &FitSlot))
++					str_copy(g_Config.m_McBackgroundFit, apFitPresets[i], sizeof(g_Config.m_McBackgroundFit));
++			}
++		}
++
++		// Video decode resolution. Deliberately SEPARATE from "Background fit":
++		// the fit setting is only a composition/crop aspect, while this one
++		// decides the size the video is actually decoded at. It defaults to the
++		// source size, so a 4K clip is never crushed to the screen size.
++		CUIRect ResRow;
++		Content.HSplitTop(LineSize, &ResRow, &Content);
++		CUIRect ResLabel, ResBox;
++		ResRow.VSplitLeft(150.0f, &ResLabel, &ResBox);
++		Ui()->DoLabel(&ResLabel, Localize("Video resolution"), FontSize, TEXTALIGN_ML);
++		static const char *const apResNames[] = {"Original (source)", "2160p", "1440p", "1080p", "720p"};
++		const int ResIndex = std::clamp(g_Config.m_McBackgroundVideoRes, 0, 4);
++		str_format(aBuf, sizeof(aBuf), "%s", Localize(apResNames[ResIndex]));
++		static CButtonContainer s_ResButtonId;
++		if(DoButton_Menu(&s_ResButtonId, aBuf, s_ResExpanded ? 1 : 0, &ResBox))
++			s_ResExpanded = !s_ResExpanded;
++		DrawExpandArrow(ResBox, s_ResExpanded);
++		GameClient()->m_Tooltips.DoToolTip(&s_ResButtonId, &ResBox, Localize("Expand to limit the video decode resolution (performance trade-off)"));
++
++		if(s_ResExpanded)
++		{
++			static CButtonContainer s_aResIds[5];
++			for(int i = 0; i < 5; ++i)
++			{
++				CUIRect ResSlot;
++				Content.HSplitTop(LineSize, &ResSlot, &Content);
++				if(!s_ScrollRegion.AddRect(ResSlot))
++					continue;
++				if(DoButton_Menu(&s_aResIds[i], Localize(apResNames[i]), g_Config.m_McBackgroundVideoRes == i ? 1 : 0, &ResSlot))
++					g_Config.m_McBackgroundVideoRes = i;
++			}
++		}
++
++		// Display mode: the background always fills the screen (no bars), so
++		// this chooses which direction is cropped / whether to stretch or tile.
++		CUIRect ModeRow;
++		Content.HSplitTop(LineSize, &ModeRow, &Content);
++		CUIRect ModeLabel, ModeBox;
++		ModeRow.VSplitLeft(150.0f, &ModeLabel, &ModeBox);
++		Ui()->DoLabel(&ModeLabel, Localize("Display mode"), FontSize, TEXTALIGN_ML);
++		static const char *const apModeNames[] = {"Crop top/bottom", "Crop left/right", "Stretch", "Tile"};
++		const int ModeIndex = std::clamp(g_Config.m_McBackgroundMode, 0, 3);
++		str_format(aBuf, sizeof(aBuf), "%s", Localize(apModeNames[ModeIndex]));
++		static CButtonContainer s_ModeButtonId;
++		if(DoButton_Menu(&s_ModeButtonId, aBuf, s_ModeExpanded ? 1 : 0, &ModeBox))
++			s_ModeExpanded = !s_ModeExpanded;
++		DrawExpandArrow(ModeBox, s_ModeExpanded);
++		GameClient()->m_Tooltips.DoToolTip(&s_ModeButtonId, &ModeBox, Localize("Expand to choose how the background fills the screen"));
++
++		if(s_ModeExpanded)
++		{
++			static CButtonContainer s_aModeIds[4];
++			for(int i = 0; i < 4; ++i)
++			{
++				CUIRect ModeSlot;
++				Content.HSplitTop(LineSize, &ModeSlot, &Content);
++				if(!s_ScrollRegion.AddRect(ModeSlot))
++					continue;
++				if(DoButton_Menu(&s_aModeIds[i], Localize(apModeNames[i]), g_Config.m_McBackgroundMode == i ? 1 : 0, &ModeSlot))
++					g_Config.m_McBackgroundMode = i;
++			}
++		}
++
++		// Tell the user which crop direction is actually possible for the loaded
++		// video on this screen. Only one direction can fill the screen without
++		// bars, so the crop modes are a preference and this line reports the
++		// effective one — otherwise picking the impossible option would look
++		// like the setting did nothing.
++		if(ModeIndex <= 1 && m_CustomBackground.SrcWidth() > 0 && m_CustomBackground.SrcHeight() > 0)
++		{
++			CUIRect HintRow;
++			Content.HSplitTop(LineSize, &HintRow, &Content);
++			const float VideoAspect = (float)m_CustomBackground.SrcWidth() / (float)m_CustomBackground.SrcHeight();
++			float TargetAspect = (float)g_Config.m_GfxScreenWidth / (float)std::max(1, g_Config.m_GfxScreenHeight);
++			int FitW = 0;
++			int FitH = 0;
++			if(sscanf(g_Config.m_McBackgroundFit, "%dx%d", &FitW, &FitH) == 2 && FitW > 0 && FitH > 0)
++				TargetAspect = (float)FitW / (float)FitH;
++			const bool CropsSides = VideoAspect > TargetAspect;
++			str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Effective"), CropsSides ? Localize("crop left/right") : Localize("crop top/bottom"));
++			TextRender()->TextColor(0.7f, 0.7f, 0.7f, 1.0f);
++			Ui()->DoLabel(&HintRow, aBuf, FontSize, TEXTALIGN_ML);
++			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
++		}
++
++		// Menu presentation: the black panel behind the rows/boxes (the "shadow"
++		// the options sit on) and the big main-menu title image.
++		// The shadow is offered as five equal steps between "no shadow at all"
++		// and the engine's authored value (25): transparent / hazy / faint /
++		// subtle / normal. Picking one stores the matching opacity.
++		CUIRect ShadowRow;
++		Content.HSplitTop(LineSize, &ShadowRow, &Content);
++		CUIRect ShadowLabel, ShadowSlots;
++		ShadowRow.VSplitLeft(150.0f, &ShadowLabel, &ShadowSlots);
++		Ui()->DoLabel(&ShadowLabel, Localize("Option shadow"), FontSize, TEXTALIGN_ML);
++		static const int s_aShadowLevels[5] = {0, 6, 13, 19, 25};
++		static const char *const s_apShadowNames[5] = {"Transparent", "Hazy", "Faint", "Subtle", "Normal"};
++		static CButtonContainer s_aShadowIds[5];
++		const float ShadowSlotWidth = ShadowSlots.w / 5.0f;
++		for(int i = 0; i < 5; ++i)
++		{
++			CUIRect Slot;
++			ShadowSlots.VSplitLeft(ShadowSlotWidth, &Slot, &ShadowSlots);
++			if(DoButton_Menu(&s_aShadowIds[i], Localize(s_apShadowNames[i]), g_Config.m_McUiPanelAlpha == s_aShadowLevels[i] ? 1 : 0, &Slot))
++				g_Config.m_McUiPanelAlpha = s_aShadowLevels[i];
++		}
++
++		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_McMenuTitle, Localize("Show the big DDNet TClient title on the main menu"), &g_Config.m_McMenuTitle, &Content, LineSize);
++
++		// status line
++		CUIRect StatusRow;
++		Content.HSplitTop(LineSize, &StatusRow, &Content);
++		str_format(aBuf, sizeof(aBuf), "%s: %s", Localize("Status"), m_CustomBackground.StatusText());
++		if(m_CustomBackground.HasError())
++			TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
++		Ui()->DoLabel(&StatusRow, aBuf, FontSize, TEXTALIGN_ML);
++		if(m_CustomBackground.HasError())
++			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
++
++		// folder + reload buttons
++		CUIRect ButtonRow;
++		Content.HSplitTop(LineSize, &ButtonRow, &Content);
++		CUIRect ReloadButton;
++		ButtonRow.VSplitRight(LineSize, &ButtonRow, &ReloadButton);
++		ButtonRow.VSplitRight(MarginSmall, &ButtonRow, nullptr);
++
++		static CButtonContainer s_OpenFolderId;
++		if(DoButton_Menu(&s_OpenFolderId, Localize("Backgrounds folder"), 0, &ButtonRow))
++		{
++			Storage()->CreateFolder(CUSTOM_BG_FOLDER, IStorage::TYPE_SAVE);
++			char aFullPath[IO_MAX_PATH_LENGTH];
++			Storage()->GetCompletePath(IStorage::TYPE_SAVE, CUSTOM_BG_FOLDER, aFullPath, sizeof(aFullPath));
++			Client()->ViewFile(aFullPath);
++			s_BackgroundFilesScanned = false;
++		}
++		GameClient()->m_Tooltips.DoToolTip(&s_OpenFolderId, &ButtonRow, Localize("Open the folder to add png/jpg/mp4 background files"));
++
++		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
++		TextRender()->SetRenderFlags(ETextRenderFlags::TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH | ETextRenderFlags::TEXT_RENDER_FLAG_NO_X_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_Y_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_PIXEL_ALIGNMENT | ETextRenderFlags::TEXT_RENDER_FLAG_NO_OVERSIZE);
++		static CButtonContainer s_ReloadButtonId;
++		const int ReloadClicked = DoButton_Menu(&s_ReloadButtonId, FontIcon::ARROW_ROTATE_RIGHT, 0, &ReloadButton);
++		TextRender()->SetRenderFlags(0);
++		TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
++		if(ReloadClicked)
++		{
++			s_BackgroundFilesScanned = false;
++			m_WallpaperEngine.Scan(true);
++		}
++		GameClient()->m_Tooltips.DoToolTip(&s_ReloadButtonId, &ReloadButton, Localize("Reload the file list"));
++		}
++	}
++
++	// ***** Section: Wallpaper Engine list (only when that source is active) ***** //
++	if(UseWallpaperEngine && s_WeListExpanded)
++	{
++		const auto &vWallpapers = m_WallpaperEngine.Wallpapers();
++		const float Rows = vWallpapers.empty() ? 1.0f : (float)vWallpapers.size();
++		CUIRect ListBox;
++		Column.HSplitTop(MarginSmall + HeadlineHeight + LineSize * Rows + Margin, &ListBox, &Column);
++		if(s_ScrollRegion.AddRect(ListBox))
++		{
++			ListBox.Draw(PanelColor, IGraphics::CORNER_ALL, 10.0f);
++			CUIRect Content = ListBox;
++			Content.HSplitTop(Margin, nullptr, &Content);
++			CUIRect Headline;
++			Content.HSplitTop(HeadlineHeight, &Headline, &Content);
++			Ui()->DoLabel(&Headline, Localize("Wallpaper Engine wallpapers (video and image only)"), HeadlineFontSize, TEXTALIGN_ML);
++			Content.HSplitTop(MarginSmall, nullptr, &Content);
++
++			if(vWallpapers.empty())
++			{
++				CUIRect EmptyRow;
++				Content.HSplitTop(LineSize, &EmptyRow, &Content);
++				Ui()->DoLabel(&EmptyRow, Localize("Nothing found. Scene and application wallpapers are not supported."), FontSize, TEXTALIGN_ML);
++			}
++			else
++			{
++				static std::vector<CButtonContainer> s_vWeButtons;
++				if(s_vWeButtons.size() < vWallpapers.size())
++					s_vWeButtons.resize(vWallpapers.size());
++				for(size_t i = 0; i < vWallpapers.size(); ++i)
++				{
++					CUIRect Slot;
++					Content.HSplitTop(LineSize, &Slot, &Content);
++					if(!s_ScrollRegion.AddRect(Slot))
++						continue;
++					const auto &Wallpaper = vWallpapers[i];
++					const bool Selected = str_comp(g_Config.m_McWePath, Wallpaper.m_Path.c_str()) == 0;
++					str_format(aBuf, sizeof(aBuf), "%s  [%s]", Wallpaper.m_Title.c_str(), CWallpaperEngine::TypeName(Wallpaper.m_Type));
++					if(DoButton_Menu(&s_vWeButtons[i], aBuf, Selected ? 1 : 0, &Slot))
++					{
++						str_copy(g_Config.m_McWePath, Wallpaper.m_Path.c_str(), sizeof(g_Config.m_McWePath));
++						// hand the wallpaper's media file to the same background
++						// pipeline, so playback reuses the existing decode/upload
++						str_copy(g_Config.m_McBackgroundPath, Wallpaper.m_Media.c_str(), sizeof(g_Config.m_McBackgroundPath));
++						g_Config.m_McMenuBackground = 1;
++					}
++				}
++			}
++		}
++	}
++
++	// ***** Section: my own file list (only for the file source) ***** //
++	if(!UseWallpaperEngine)
++	{
++		const size_t FileCount = s_vBackgroundFiles.size();
++		const float Rows = (float)(FileCount > 0 ? FileCount : 1);
++		const float BoxHeight = Margin + HeadlineHeight + MarginSmall + LineSize * Rows + Margin;
++		CUIRect Box;
++		Column.HSplitTop(BoxHeight, &Box, &Column);
++		if(!s_ScrollRegion.AddRect(Box))
++		{
++			// box scrolled out of view: only its scroll extent was registered
++		}
++		else
++		{
++		Box.Draw(PanelColor, IGraphics::CORNER_ALL, 10.0f);
++
++		CUIRect Content = Box;
++		Content.HSplitTop(Margin, nullptr, &Content);
++		CUIRect Headline;
++		Content.HSplitTop(HeadlineHeight, &Headline, &Content);
++		Ui()->DoLabel(&Headline, Localize("Background"), HeadlineFontSize, TEXTALIGN_ML);
++		Content.HSplitTop(MarginSmall, nullptr, &Content);
++
++		if(FileCount == 0)
++		{
++			CUIRect EmptyRow;
++			Content.HSplitTop(LineSize, &EmptyRow, &Content);
++			Ui()->DoLabel(&EmptyRow, Localize("No files found. Put png/jpg/mp4 files into the folder above."), FontSize, TEXTALIGN_ML);
++		}
++		else
++		{
++		static std::vector<CButtonContainer> s_vFileButtons;
++		if(s_vFileButtons.size() < FileCount)
++			s_vFileButtons.resize(FileCount);
++
++		for(size_t i = 0; i < FileCount; ++i)
++		{
++			CUIRect Slot;
++			Content.HSplitTop(LineSize, &Slot, &Content);
++			if(!s_ScrollRegion.AddRect(Slot))
++				continue;
++
++			const std::string &File = s_vBackgroundFiles[i];
++			const bool Selected = str_comp(g_Config.m_McBackgroundPath, File.c_str()) == 0;
++			if(DoButton_Menu(&s_vFileButtons[i], File.c_str(), Selected ? 1 : 0, &Slot))
++			{
++				str_copy(g_Config.m_McBackgroundPath, File.c_str(), sizeof(g_Config.m_McBackgroundPath));
++			}
++		}
++		}
++		}
++	}
++	s_ScrollRegion.End();
++	} // if(s_ActiveModuleTab == 0)  —— 模块：背景
++}
+diff --git a/src/game/client/components/menus_start.cpp b/src/game/client/components/menus_start.cpp
+index b54fb79..b8b5280 100644
+--- a/src/game/client/components/menus_start.cpp
++++ b/src/game/client/components/menus_start.cpp
+@@ -25,13 +25,16 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
+ {
+ 	GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_START);
+ 
+-	// render logo
+-	Graphics()->TextureSet(g_pData->m_aImages[IMAGE_BANNER].m_Id);
+-	Graphics()->QuadsBegin();
+-	Graphics()->SetColor(1, 1, 1, 1);
+-	IGraphics::CQuadItem QuadItem(MainView.w / 2 - 170, 60, 360, 103);
+-	Graphics()->QuadsDrawTL(&QuadItem, 1);
+-	Graphics()->QuadsEnd();
++	// render logo (can be turned off with mc_menu_title)
++	if(g_Config.m_McMenuTitle)
++	{
++		Graphics()->TextureSet(g_pData->m_aImages[IMAGE_BANNER].m_Id);
++		Graphics()->QuadsBegin();
++		Graphics()->SetColor(1, 1, 1, 1);
++		IGraphics::CQuadItem QuadItem(MainView.w / 2 - 170, 60, 360, 103);
++		Graphics()->QuadsDrawTL(&QuadItem, 1);
++		Graphics()->QuadsEnd();
++	}
+ 
+ 	const float Rounding = 10.0f;
+ 	const float VMargin = MainView.w / 2 - 190.0f;
+diff --git a/src/game/client/components/wallpaper_engine.cpp b/src/game/client/components/wallpaper_engine.cpp
+new file mode 100644
+index 0000000..a4c2e21
+--- /dev/null
++++ b/src/game/client/components/wallpaper_engine.cpp
+@@ -0,0 +1,442 @@
++#include "wallpaper_engine.h"
++
++#include <base/fs.h>
++#include <base/log.h>
++#include <base/str.h>
++
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++
++namespace
++{
++	// Wallpaper Engine's Steam application id. Workshop wallpapers live under
++	// <steam library>/steamapps/workshop/content/<this id>/<workshop id>/.
++	constexpr const char *WE_APPID = "431960";
++
++	void ToLowerExt(const char *pPath, char *pOut, size_t OutSize)
++	{
++		const char *pDot = nullptr;
++		for(const char *p = pPath; *p != '\0'; ++p)
++		{
++			if(*p == '.')
++				pDot = p;
++		}
++		if(pDot == nullptr)
++		{
++			pOut[0] = '\0';
++			return;
++		}
++		++pDot;
++		size_t i = 0;
++		for(; pDot[i] != '\0' && i + 1 < OutSize; ++i)
++			pOut[i] = (char)tolower((unsigned char)pDot[i]);
++		pOut[i] = '\0';
++	}
++
++	// Read a JSON string value for a top-level key. Wallpaper Engine's
++	// project.json is machine generated and flat for the fields we need, so a
++	// tiny scanner is enough and avoids pulling in a JSON dependency.
++	bool JsonString(const std::string &Json, const char *pKey, std::string &Out)
++	{
++		char aPattern[64];
++		str_format(aPattern, sizeof(aPattern), "\"%s\"", pKey);
++		size_t Pos = Json.find(aPattern);
++		if(Pos == std::string::npos)
++			return false;
++		Pos = Json.find(':', Pos + str_length(aPattern));
++		if(Pos == std::string::npos)
++			return false;
++		++Pos;
++		while(Pos < Json.size() && (Json[Pos] == ' ' || Json[Pos] == '\t' || Json[Pos] == '\r' || Json[Pos] == '\n'))
++			++Pos;
++		if(Pos >= Json.size() || Json[Pos] != '"')
++			return false;
++		++Pos;
++		Out.clear();
++		while(Pos < Json.size() && Json[Pos] != '"')
++		{
++			// handle the two escapes that actually show up in wallpaper titles
++			if(Json[Pos] == '\\' && Pos + 1 < Json.size())
++			{
++				++Pos;
++				switch(Json[Pos])
++				{
++				case 'n': Out.push_back('\n'); break;
++				case 't': Out.push_back('\t'); break;
++				case '"': Out.push_back('"'); break;
++				case '\\': Out.push_back('\\'); break;
++				case '/': Out.push_back('/'); break;
++				case 'u':
++					// Non-ASCII titles are common (Chinese wallpapers). Decode
++					// \uXXXX to UTF-8 so they display correctly. Surrogate pairs
++					// are combined when a second \uXXXX follows.
++					if(Pos + 4 < Json.size())
++					{
++						char aHex[5] = {Json[Pos + 1], Json[Pos + 2], Json[Pos + 3], Json[Pos + 4], '\0'};
++						unsigned long Cp = strtoul(aHex, nullptr, 16);
++						Pos += 4;
++						if(Cp >= 0xD800 && Cp <= 0xDBFF && Pos + 6 < Json.size() && Json[Pos + 1] == '\\' && Json[Pos + 2] == 'u')
++						{
++							char aLow[5] = {Json[Pos + 3], Json[Pos + 4], Json[Pos + 5], Json[Pos + 6], '\0'};
++							const unsigned long Low = strtoul(aLow, nullptr, 16);
++							if(Low >= 0xDC00 && Low <= 0xDFFF)
++							{
++								Cp = 0x10000 + ((Cp - 0xD800) << 10) + (Low - 0xDC00);
++								Pos += 6;
++							}
++						}
++						char aUtf8[4];
++						int Len = 0;
++						if(Cp < 0x80)
++						{
++							aUtf8[Len++] = (char)Cp;
++						}
++						else if(Cp < 0x800)
++						{
++							aUtf8[Len++] = (char)(0xC0 | (Cp >> 6));
++							aUtf8[Len++] = (char)(0x80 | (Cp & 0x3F));
++						}
++						else if(Cp < 0x10000)
++						{
++							aUtf8[Len++] = (char)(0xE0 | (Cp >> 12));
++							aUtf8[Len++] = (char)(0x80 | ((Cp >> 6) & 0x3F));
++							aUtf8[Len++] = (char)(0x80 | (Cp & 0x3F));
++						}
++						else
++						{
++							aUtf8[Len++] = (char)(0xF0 | (Cp >> 18));
++							aUtf8[Len++] = (char)(0x80 | ((Cp >> 12) & 0x3F));
++							aUtf8[Len++] = (char)(0x80 | ((Cp >> 6) & 0x3F));
++							aUtf8[Len++] = (char)(0x80 | (Cp & 0x3F));
++						}
++						Out.append(aUtf8, (size_t)Len);
++					}
++					break;
++				default: Out.push_back(Json[Pos]); break;
++				}
++				++Pos;
++				continue;
++			}
++			Out.push_back(Json[Pos]);
++			++Pos;
++		}
++		return true;
++	}
++
++	bool ReadWholeFile(const std::string &Path, std::string &Out)
++	{
++		FILE *pFile = fopen(Path.c_str(), "rb");
++		if(pFile == nullptr)
++			return false;
++		fseek(pFile, 0, SEEK_END);
++		const long Size = ftell(pFile);
++		fseek(pFile, 0, SEEK_SET);
++		if(Size <= 0)
++		{
++			fclose(pFile);
++			return false;
++		}
++		Out.resize((size_t)Size);
++		const size_t Read = fread(&Out[0], 1, (size_t)Size, pFile);
++		fclose(pFile);
++		Out.resize(Read);
++		return Read > 0;
++	}
++
++}
++
++std::string CWallpaperEngine::JoinPath(const std::string &A, const std::string &B)
++{
++	if(A.empty())
++		return B;
++	if(B.empty())
++		return A;
++	const char Last = A[A.size() - 1];
++	if(Last == '/' || Last == '\\')
++		return A + B;
++	return A + "/" + B;
++}
++
++bool CWallpaperEngine::FileExists(const std::string &Path)
++{
++	return fs_is_file(Path.c_str()) != 0;
++}
++
++bool CWallpaperEngine::DirExists(const std::string &Path)
++{
++	return fs_is_dir(Path.c_str()) != 0;
++}
++
++const char *CWallpaperEngine::TypeName(EType Type)
++{
++	switch(Type)
++	{
++	case EType::VIDEO: return "video";
++	case EType::IMAGE: return "image";
++	case EType::WEB: return "web";
++	case EType::SCENE: return "scene";
++	case EType::APPLICATION: return "application";
++	case EType::UNKNOWN: break;
++	}
++	return "unknown";
++}
++
++CWallpaperEngine::EType CWallpaperEngine::TypeFromString(const std::string &Type, const std::string &File)
++{
++	std::string Lower;
++	Lower.reserve(Type.size());
++	for(const char c : Type)
++		Lower.push_back((char)tolower((unsigned char)c));
++
++	if(Lower == "video")
++		return EType::VIDEO;
++	if(Lower == "image")
++		return EType::IMAGE;
++	if(Lower == "web")
++		return EType::WEB;
++	if(Lower == "scene")
++		return EType::SCENE;
++	if(Lower == "application")
++		return EType::APPLICATION;
++
++	// No usable "type": infer it from the entry file, exactly like Wallpaper
++	// Engine's own tooling does.
++	char aExt[16];
++	ToLowerExt(File.c_str(), aExt, sizeof(aExt));
++	if(str_comp(aExt, "mp4") == 0 || str_comp(aExt, "webm") == 0 || str_comp(aExt, "mkv") == 0 ||
++		str_comp(aExt, "avi") == 0 || str_comp(aExt, "mov") == 0 || str_comp(aExt, "m4v") == 0)
++		return EType::VIDEO;
++	if(str_comp(aExt, "jpg") == 0 || str_comp(aExt, "jpeg") == 0 || str_comp(aExt, "png") == 0 ||
++		str_comp(aExt, "gif") == 0 || str_comp(aExt, "webp") == 0 || str_comp(aExt, "bmp") == 0)
++		return EType::IMAGE;
++	if(str_comp(aExt, "html") == 0 || str_comp(aExt, "htm") == 0 || str_comp(aExt, "js") == 0)
++		return EType::WEB;
++	if(str_comp(aExt, "pkg") == 0)
++		return EType::SCENE;
++	return EType::UNKNOWN;
++}
++
++bool CWallpaperEngine::ReadProjectJson(const std::string &Folder, std::string &Title, std::string &File, EType &Type)
++{
++	const std::string ProjectJson = JoinPath(Folder, "project.json");
++	std::string Json;
++	if(!ReadWholeFile(ProjectJson, Json))
++		return false;
++
++	std::string TypeStr;
++	const bool HasFile = JsonString(Json, "file", File);
++	JsonString(Json, "type", TypeStr);
++	if(!JsonString(Json, "title", Title) || Title.empty())
++	{
++		// fall back to the folder name when the wallpaper has no title
++		const size_t Slash = Folder.find_last_of("/\\");
++		Title = Slash == std::string::npos ? Folder : Folder.substr(Slash + 1);
++	}
++	Type = TypeFromString(TypeStr, File);
++	return HasFile || !TypeStr.empty();
++}
++
++std::string CWallpaperEngine::ResolveMedia(const std::string &Folder, EType Type, const std::string &DeclaredFile)
++{
++	// Only video and image wallpapers are supported: scene wallpapers need
++	// Wallpaper Engine's own scene renderer and web needs a browser engine.
++	if(Type != EType::VIDEO && Type != EType::IMAGE)
++		return std::string();
++
++	if(!DeclaredFile.empty())
++	{
++		const std::string Candidate = JoinPath(Folder, DeclaredFile);
++		if(FileExists(Candidate))
++			return Candidate;
++	}
++
++	// Fall back to the first media file in the folder. Wallpaper Engine items
++	// frequently declare a scene.json while shipping only a video, and orphaned
++	// folders have no project.json at all.
++	static const char *apVideoExts[] = {"mp4", "webm", "mkv", "mov", "avi", "m4v"};
++	static const char *apImageExts[] = {"jpg", "jpeg", "png", "webp", "bmp", "gif"};
++	const bool WantVideo = Type == EType::VIDEO;
++
++	struct SFindCtx
++	{
++		const char *const *m_apExts;
++		int m_ExtCount;
++		std::string m_Found;
++	};
++	SFindCtx Ctx;
++	Ctx.m_apExts = WantVideo ? apVideoExts : apImageExts;
++	Ctx.m_ExtCount = WantVideo ? (int)(sizeof(apVideoExts) / sizeof(apVideoExts[0])) : (int)(sizeof(apImageExts) / sizeof(apImageExts[0]));
++
++	fs_listdir(
++		Folder.c_str(),
++		[](const char *pName, int IsDir, int DirType, void *pUser) -> int {
++			(void)DirType;
++			auto *pCtx = static_cast<SFindCtx *>(pUser);
++			if(IsDir || !pCtx->m_Found.empty())
++				return 0;
++			char aExt[16];
++			ToLowerExt(pName, aExt, sizeof(aExt));
++			for(int i = 0; i < pCtx->m_ExtCount; ++i)
++			{
++				if(str_comp(aExt, pCtx->m_apExts[i]) == 0)
++				{
++					pCtx->m_Found = pName;
++					break;
++				}
++			}
++			return 0;
++		},
++		0, &Ctx);
++
++	if(!Ctx.m_Found.empty())
++		return JoinPath(Folder, Ctx.m_Found);
++	return std::string();
++}
++
++void CWallpaperEngine::ScanRoot(const std::string &Root)
++{
++	// Two-phase scan.
++	//
++	// Phase 1 only collects the immediate sub-directory names. Phase 2 inspects
++	// each one AFTER the directory iteration has finished. This matters because
++	// inspecting an item needs its own fs_listdir (to find the media file), and
++	// running a nested fs_listdir from inside a listdir callback re-enters the
++	// storage backend while it is still iterating — a good way to crash or
++	// produce garbage entries.
++	struct SCollectCtx
++	{
++		std::vector<std::string> m_vFolders;
++	};
++	SCollectCtx Collect;
++	fs_listdir(
++		Root.c_str(),
++		[](const char *pName, int IsDir, int DirType, void *pUser) -> int {
++			(void)DirType;
++			if(!IsDir)
++				return 0;
++			auto *pCtx = static_cast<SCollectCtx *>(pUser);
++			pCtx->m_vFolders.emplace_back(pName);
++			return 0;
++		},
++		0, &Collect);
++
++	// Phase 2: now that iteration is done, inspect each folder.
++	for(const std::string &Name : Collect.m_vFolders)
++	{
++		const std::string Folder = JoinPath(Root, Name);
++		std::string Title;
++		std::string File;
++		EType Type = EType::UNKNOWN;
++		if(!ReadProjectJson(Folder, Title, File, Type))
++		{
++			// No project.json: try to infer from the folder contents, so
++			// orphaned/partially installed items still show up.
++			const std::string Video = ResolveMedia(Folder, EType::VIDEO, "");
++			if(!Video.empty())
++			{
++				Type = EType::VIDEO;
++			}
++			else
++			{
++				const std::string Image = ResolveMedia(Folder, EType::IMAGE, "");
++				if(Image.empty())
++					continue;
++				Type = EType::IMAGE;
++			}
++			Title = Name;
++		}
++
++		const std::string Media = ResolveMedia(Folder, Type, File);
++		if(Media.empty())
++			continue; // scene/web/application or nothing playable
++
++		SWallpaper Wallpaper;
++		Wallpaper.m_Id = Name;
++		Wallpaper.m_Title = Title;
++		Wallpaper.m_Path = Folder;
++		Wallpaper.m_Media = Media;
++		Wallpaper.m_Type = Type;
++		AddFound(Wallpaper);
++	}
++}
++
++void CWallpaperEngine::Scan(bool Force)
++{
++	if(m_Scanned && !Force)
++		return;
++	m_Scanned = true;
++	m_vWallpapers.clear();
++	m_LastError.clear();
++
++	// Candidate Wallpaper Engine install directories and Steam library roots.
++	// The install directory is confirmed by wallpaper32.exe, and workshop items
++	// live under <library>/steamapps/workshop/content/431960.
++	static const char *apProbeDirs[] = {
++		"C:/Program Files (x86)/Steam",
++		"C:/Program Files/Steam",
++		"D:/Steam",
++		"D:/SteamLibrary",
++		"E:/Steam",
++		"E:/SteamLibrary",
++		"F:/SteamLibrary",
++	};
++
++	bool FoundAny = false;
++	for(const char *pSteamRoot : apProbeDirs)
++	{
++		const std::string SteamRoot = pSteamRoot;
++		if(!DirExists(SteamRoot))
++			continue;
++
++		// Wallpaper Engine install: <steam>/steamapps/common/wallpaper_engine
++		const std::string WeInstall = JoinPath(JoinPath(JoinPath(SteamRoot, "steamapps"), "common"), "wallpaper_engine");
++		if(DirExists(WeInstall) && FileExists(JoinPath(WeInstall, "wallpaper32.exe")))
++		{
++			if(m_InstallDir.empty())
++				m_InstallDir = WeInstall;
++			ScanRoot(JoinPath(JoinPath(WeInstall, "projects"), "defaultprojects"));
++			ScanRoot(JoinPath(JoinPath(WeInstall, "projects"), "myprojects"));
++			FoundAny = true;
++		}
++
++		// Steam Workshop items for the Wallpaper Engine app id.
++		const std::string Workshop = JoinPath(JoinPath(JoinPath(JoinPath(SteamRoot, "steamapps"), "workshop"), "content"), WE_APPID);
++		if(DirExists(Workshop))
++		{
++			ScanRoot(Workshop);
++			FoundAny = true;
++		}
++	}
++
++	if(!FoundAny)
++		m_LastError = "Wallpaper Engine / Steam workshop not found";
++	else if(m_vWallpapers.empty())
++		m_LastError = "No video or image wallpapers found";
++}
++
++void CWallpaperEngine::AddFound(const SWallpaper &Wallpaper)
++{
++	for(const SWallpaper &Existing : m_vWallpapers)
++	{
++		if(Existing.m_Media == Wallpaper.m_Media)
++			return;
++	}
++	m_vWallpapers.push_back(Wallpaper);
++}
++
++const CWallpaperEngine::SWallpaper *CWallpaperEngine::Find(const char *pIdOrPath) const
++{
++	if(pIdOrPath == nullptr || pIdOrPath[0] == '\0')
++		return nullptr;
++	for(const SWallpaper &Wallpaper : m_vWallpapers)
++	{
++		if(str_comp(Wallpaper.m_Id.c_str(), pIdOrPath) == 0)
++			return &Wallpaper;
++		if(str_comp(Wallpaper.m_Path.c_str(), pIdOrPath) == 0)
++			return &Wallpaper;
++		if(str_comp(Wallpaper.m_Media.c_str(), pIdOrPath) == 0)
++			return &Wallpaper;
++	}
++	return nullptr;
++}
+diff --git a/src/game/client/components/wallpaper_engine.h b/src/game/client/components/wallpaper_engine.h
+new file mode 100644
+index 0000000..d1ca9be
+--- /dev/null
++++ b/src/game/client/components/wallpaper_engine.h
+@@ -0,0 +1,83 @@
++#ifndef GAME_CLIENT_COMPONENTS_WALLPAPER_ENGINE_H
++#define GAME_CLIENT_COMPONENTS_WALLPAPER_ENGINE_H
++
++#include <base/types.h>
++
++#include <string>
++#include <vector>
++
++/**
++ * Wallpaper Engine wallpaper discovery (Background -> Wallpaper Engine).
++ *
++ * Scope, per the user's request: only the core wallpaper functionality plus
++ * sound — video wallpapers and image wallpapers. Scene and application
++ * wallpapers are deliberately NOT supported (that would require porting
++ * Wallpaper Engine's own scene renderer, which is out of scope).
++ *
++ * How a wallpaper is described on disk (verified against Wallpaper Engine's
++ * format and the dsh-wallpaper-engine reference implementation):
++ *   <item>/project.json with { "file": ..., "type": ..., "title": ... }
++ *   type is one of "video" | "image" (formerly "scene") | "web" | "application".
++ *   Wallpapers live in either the install directory (projects/defaultprojects,
++ *   projects/myprojects) or the Steam Workshop (steamapps/workshop/content/431960).
++ *
++ * This class only *finds* wallpapers and resolves the media file; the actual
++ * decode/playback reuses the existing FFmpeg background pipeline, and the audio
++ * uses the engine's own sound system. It never touches gameplay state.
++ */
++class CWallpaperEngine
++{
++public:
++	enum class EType
++	{
++		UNKNOWN,
++		VIDEO, // .mp4 / .webm / ... — playable by the existing video pipeline
++		IMAGE, // .jpg / .png / ...   — playable by the existing image pipeline
++		WEB,   // HTML — not supported here
++		SCENE, // .pkg — not supported here
++		APPLICATION,
++	};
++
++	struct SWallpaper
++	{
++		std::string m_Id;    // workshop id, or the folder name for local projects
++		std::string m_Title; // human readable name from project.json
++		std::string m_Path;  // absolute path to the wallpaper folder
++		std::string m_Media; // absolute path to the media file to play
++		EType m_Type = EType::UNKNOWN;
++	};
++
++	// Rescan the Steam library + Wallpaper Engine install for wallpapers.
++	// Cheap enough to call on demand (it is cached after the first scan).
++	void Scan(bool Force = false);
++
++	const std::vector<SWallpaper> &Wallpapers() const { return m_vWallpapers; }
++	const std::string &InstallDir() const { return m_InstallDir; }
++	const std::string &LastError() const { return m_LastError; }
++
++	// Find one wallpaper by workshop id or folder path (what mc_we_path stores).
++	const SWallpaper *Find(const char *pIdOrPath) const;
++
++	// Used by the directory scanner (public so the file-local callback can call it).
++	void AddFound(const SWallpaper &Wallpaper);
++
++	// Resolve a wallpaper's media file for the background pipeline. Returns an
++	// empty string for scene/web/application wallpapers (unsupported).
++	static std::string ResolveMedia(const std::string &Folder, EType Type, const std::string &DeclaredFile);
++	static const char *TypeName(EType Type);
++
++private:
++	std::vector<SWallpaper> m_vWallpapers;
++	std::string m_InstallDir;
++	std::string m_LastError;
++	bool m_Scanned = false;
++
++	void ScanRoot(const std::string &Root);
++	static bool ReadProjectJson(const std::string &Folder, std::string &Title, std::string &File, EType &Type);
++	static EType TypeFromString(const std::string &Type, const std::string &File);
++	static bool FileExists(const std::string &Path);
++	static bool DirExists(const std::string &Path);
++	static std::string JoinPath(const std::string &A, const std::string &B);
++};
++
++#endif
