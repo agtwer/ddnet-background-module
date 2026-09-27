@@ -2,8 +2,8 @@
 #
 #   powershell -ExecutionPolicy Bypass -File pack-dmod.ps1
 #
-# module.json 是唯一事实来源：id / version 从它读，容器内的补丁路径统一写成 patch/module.patch。
-# 补丁本身不由本脚本生成（它来自游戏仓库：git diff --output=... 6b4118bf0）。
+# module.json 是唯一事实来源：id / version 从它读；容器内的补丁路径与 module.json 的 patches 映射保持一致。
+# 补丁本身不由本脚本生成（它来自游戏仓库：改好的树 git add -A + git diff --cached --binary）。
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -25,20 +25,12 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'patch') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'files') | Out-Null
 
-$meta.patch = 'patch/module.patch'
-$meta.patches = [ordered]@{ tclient = 'patch/module.patch'; 'ddnet@19.9' = 'patch/ddnet.patch'; 'ddnet@20.1' = 'patch/ddnet-20.1.patch' }
+$meta.patch = 'patch/ddnet-20.1.patch'
+$meta.patches = [ordered]@{ 'ddnet@20.1' = 'patch/ddnet-20.1.patch' }
 $json = $meta | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText((Join-Path $stage 'module.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
 
-# Patches: TClient baseline (patch\ddnet-background.patch -> patch/module.patch),
-# DDNet 19.9 (patch\ddnet-19.9.patch -> patch/ddnet.patch),
-# DDNet 20.1 (patch\ddnet-20.1.patch -> patch/ddnet-20.1.patch).
-$patch = Join-Path $root 'patch\ddnet-background.patch'
-if (-not (Test-Path $patch)) { throw "missing patch (TClient baseline): $patch" }
-Copy-Item $patch (Join-Path $stage 'patch\module.patch') -Force
-$patchDdnet = Join-Path $root 'patch\ddnet-19.9.patch'
-if (-not (Test-Path $patchDdnet)) { throw "missing patch (DDNet 19.9 baseline): $patchDdnet" }
-Copy-Item $patchDdnet (Join-Path $stage 'patch\ddnet.patch') -Force
+# Patch: DDNet 20.1 (patch\ddnet-20.1.patch -> patch/ddnet-20.1.patch).
 $patchDdnet201 = Join-Path $root 'patch\ddnet-20.1.patch'
 if (-not (Test-Path $patchDdnet201)) { throw "missing patch (DDNet 20.1 baseline): $patchDdnet201" }
 Copy-Item $patchDdnet201 (Join-Path $stage 'patch\ddnet-20.1.patch') -Force

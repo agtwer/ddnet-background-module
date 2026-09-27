@@ -1,6 +1,6 @@
 # ddnet-background-module - installer (Windows / PowerShell)
 #
-# Applies the custom-background feature to a DDNet-family client source tree.
+# Applies the custom-background feature to a DDNet source tree (supported base: DDNet official 20.1).
 #
 #   powershell -ExecutionPolicy Bypass -File apply.ps1 -Target C:\path\to\client
 #
@@ -9,7 +9,7 @@
 #   -CheckOnly      only test whether the patch applies cleanly
 #   -Revert         remove the feature again (reverse-apply)
 #   -Reject         apply what fits and leave .rej files for the rest
-#                   (use this on a base other than TClient 10.9.0)
+#                   (use this when some hunks do not apply)
 param(
     [string]$Target = ".",
     [switch]$CheckOnly,
@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $moduleDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$patch = Join-Path $moduleDir 'patch\ddnet-background.patch'
+$patch = Join-Path $moduleDir 'patch\ddnet-20.1.patch'
 
 if (-not (Test-Path $patch)) { throw "patch not found: $patch" }
 if (-not (Test-Path $Target)) { throw "target not found: $Target" }
@@ -31,11 +31,11 @@ if (-not (Test-Path $marker)) {
     throw "'$Target' does not look like a DDNet-family client source tree (src\game\client\components\menus.cpp missing)"
 }
 $isTClient = Test-Path (Join-Path $Target 'src\engine\shared\config_variables_tclient.h')
-$base = if ($isTClient) { 'TClient 10.9.0 (verified)' } else { 'DDNet official / other fork (unverified)' }
+$base = if ($isTClient) { 'TClient / other fork' } else { 'DDNet official (20.1 is the supported base)' }
 Write-Host "Detected base: $base" -ForegroundColor Cyan
-if (-not $isTClient -and -not $Reject -and -not $CheckOnly) {
-    Write-Host "[i] This base is not the verified one. Re-run with -Reject" -ForegroundColor Yellow
-    Write-Host "    to apply the parts that fit and leave .rej files for the rest (each hunk carries its own anchor)." -ForegroundColor Yellow
+if ($isTClient -and -not $CheckOnly) {
+    Write-Host "[i] this module ships a patch for DDNet official 20.1 only." -ForegroundColor Yellow
+    Write-Host "    On other bases run with -Reject to apply the parts that fit, then fix the rest by hand." -ForegroundColor Yellow
 }
 $already = Test-Path (Join-Path $Target 'src\game\client\components\custom_background.cpp')
 if ($already -and -not $Revert) {
@@ -66,12 +66,12 @@ if ($code -ne 0) {
         Write-Host ""
         Write-Host "[!] partial apply: $($rej.Count) hunk(s) rejected and written to .rej files." -ForegroundColor Yellow
         foreach ($r in $rej) { Write-Host "    $($r.FullName.Replace($Target + '\', ''))" -ForegroundColor Yellow }
-        Write-Host "    Fix them by hand using the hunk context in patch\ddnet-background.patch, then delete the .rej files." -ForegroundColor Yellow
+        Write-Host "    Fix them by hand using the hunk context in patch\ddnet-20.1.patch, then delete the .rej files." -ForegroundColor Yellow
         exit 0
     }
     Write-Host ""
     Write-Host "[x] git apply failed (exit $code)." -ForegroundColor Red
-    Write-Host "    Common causes: the tree is not based on TClient 10.9.0 (commit 6b4118bf0), or it already" -ForegroundColor Red
+    Write-Host "    Common causes: the tree is not DDNet official 20.1, or it already" -ForegroundColor Red
     Write-Host "    has local modifications in the touched files. Re-run with -Reject to see which hunks clash." -ForegroundColor Red
     exit $code
 }

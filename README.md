@@ -1,14 +1,14 @@
 # ddnet-background-module
 
-这是一个**基于 DDNet 的背景模块**：把「自定义背景（图片 / 视频动态背景）」做成可插拔的源码模块——给一份干净的 DDNet / TClient 源码打一个补丁即得到完整功能，不打补丁就是原版客户端。
+这是一个**基于 DDNet 的背景模块**：把「自定义背景（图片 / 视频动态背景）」做成可插拔的源码模块——给一份干净的 DDNet 官方 20.1 源码打一个补丁即得到完整功能，不打补丁就是原版客户端。
 
-> 本模块同时也是一份**模块开发样例**（双基线补丁、新增源文件、FFmpeg 依赖）：字段与打包规则见 [模块开发文档](https://github.com/agtwer/ddnet-module-installer/blob/main/MODULE-DEV.md)。
+> 本模块同时也是一份**模块开发样例**（多基线补丁映射、新增源文件、FFmpeg 依赖）：字段与打包规则见 [模块开发文档](https://github.com/agtwer/ddnet-module-installer/blob/main/MODULE-DEV.md)。
 
 ## 安装方法
 
 | 方式 | 做法 | 获取来源 |
 |---|---|---|
-| **A. 程序一键部署** | 用安装器选模块后一键完成：拉源码 → 打补丁 → 装 FFmpeg 8.1 → 编译 → 组装出可直接双击的客户端目录 | **ddnet-module-installer**：<https://github.com/agtwer/ddnet-module-installer>（把 `dist/background-1.0.dmod` 放进安装器的 `mods\`，或直接拖进窗口） |
+| **A. 程序一键部署** | 用安装器选模块后一键完成：拉源码 → 打补丁 → 装 FFmpeg 8.1 → 编译 → 组装出可直接双击的客户端目录 | **ddnet-module-installer**：<https://github.com/agtwer/ddnet-module-installer>（把 `dist/background-1.2.dmod` 放进安装器的 `mods\`，或直接拖进窗口） |
 | **B. 一条命令全自动** | `powershell -ExecutionPolicy Bypass -File install.ps1`（自动完成：拉源码@基线提交 → 子模块 → 打补丁 → 装 FFmpeg 8.1 → cmake 构建 → 组装 `dist\` 可直接双击的目录）。**镜像默认就开**，可换一个用 `-Mirror <host>`、关掉用 `-MirrorOff`；本机有代理就加 `-Proxy 127.0.0.1:7890`（代理同时作用于 git 与 FFmpeg 下载，也会带给子模块那 580MB） | git clone 本页：`git clone https://github.com/agtwer/ddnet-background-module` |
 
 ```powershell
@@ -17,40 +17,37 @@ install.ps1 -WorkDir D:\src\myclient                        # 指定目录（镜
 install.ps1 -Mirror <host>                                  # 换一个镜像域名
 install.ps1 -MirrorOff                                      # 直连 GitHub（不用镜像）
 install.ps1 -Proxy 127.0.0.1:7890                           # 走本机 HTTP 代理
-install.ps1 -Source C:\src\TClient                          # 直接给已有源码树打补丁（不克隆）
+install.ps1 -Source C:\src\ddnet-20.1                       # 直接给已有源码树打补丁（不克隆）
 install.ps1 -SkipBuild                                      # 只装补丁与 FFmpeg，稍后自己编译
 install.ps1 -SkipFfmpeg -FfmpegZip C:\dl\ffmpeg.zip
 ```
 
 [English below ↓](#english)
 
-## 支持的基线（官方版 / TClient / 其它分支都能用）
+## 支持的基线
 
 | 基线 | 状态 | 说明 |
 |---|---|---|
-| **TClient 10.9.0**（`6b4118bf0`） | ✅ **完整验证** | 补丁干净套用 + 内容 25/25 一致 + 编译通过 + 实机逐项验证；容器内是 `patch/module.patch` |
-| **DDNet 官方版 19.9** | ✅ **完整验证** | 有**专用补丁** `patch/ddnet-19.9.patch`（容器内 `patch/ddnet.patch`）：DDNet 没有 `CScreenRect`/`GetScreen()` 结构体重载（改用四浮点 `GetScreen(&x,&y,&x2,&y2)`）、没有 `TCLocalize`（改 `Localize`，两参数形式取回退串）、配置变量加在公共 `config_variables.h`（TClient 是它自己的 `config_variables_tclient.h`）、`UiPage` 上限放宽、设置页枚举/标签/源文件列表按 DDNet 结构落位；17 文件 2495 行，编译 0 错误并实机验收 |
-| **其它第三方分支** | ⚠️ **通用做法** | 耦合面只有 6 处，用 `-Reject` 半自动套用 + 按锚点手工贴 |
+| **DDNet 官方版 20.1** | ✅ **完整验证** | 补丁 `patch/ddnet-20.1.patch`（容器内同名）：干净套用 + 编译 0 错误 + 实机验证（选项背景深浅五档、隐藏 GUI、4K 视频按屏幕分辨率解码） |
+| **其它 DDNet 版本 / 分支** | ⚠️ **通用做法** | 耦合面只有 6 处，用 `-Reject` 半自动套用 + 按锚点手工贴（本模块只对官方 20.1 提供适配补丁） |
 
-**多基线补丁机制**：`module.json` 里用 `patches` 映射按来源 id 给不同上游各带一份补丁（`{"tclient":"patch/module.patch","ddnet":"patch/ddnet.patch"}`），旧的单数 `patch` 仍作默认回退；安装器识别当前选择的上游后自动取对应那份，日志会写明「使用 ddnet 专用补丁」，某上游没有专用补丁时回退通用补丁并告警。
+**多基线补丁机制**：`module.json` 里用 `patches` 映射按「来源@版本」带对应补丁（本模块为 `{"ddnet@20.1":"patch/ddnet-20.1.patch"}`），安装器按当前选择自动取那份，日志会写明「使用 ddnet 20.1 专用补丁」。
 
 ```powershell
-apply.ps1 -Target C:\path\to\fork -CheckOnly   # 先看能不能干净套上（不改文件）
-apply.ps1 -Target C:\path\to\fork -Reject      # 能套的套上，套不上的留 .rej（附清单）
-apply.ps1 -Target C:\path\to\fork -Revert      # 卸载
+apply.ps1 -Target C:\path\to\ddnet-20.1 -CheckOnly   # 先看能不能干净套上（不改文件）
+apply.ps1 -Target C:\path\to\ddnet-20.1 -Reject      # 能套的套上，套不上的留 .rej（附清单）
+apply.ps1 -Target C:\path\to\ddnet-20.1 -Revert      # 卸载
 ```
-
-安装器会自动识别基线（有没有 `src/engine/shared/config_variables_tclient.h`）并给出提示。
 
 ## 适用基线
 
 | 项 | 值 |
 |---|---|
-| 上游 | **TClient 10.9.0**（`TaterClient/TClient`），其上游为 DDNet |
-| 基线提交 | `6b4118bf0` |
-| 改动规模 | 25 个文件，+2912 / −22 行 |
+| 上游 | **ddnet/ddnet 官方版 20.1** |
+| 基线提交 | `20.1`（tag） |
+| 改动规模 | 17 个文件，+2572 / −7 行 |
 
-> **已验证**：把基线提交的干净树取出后套上本补丁，25/25 个文件与开发树内容完全一致（`git archive` 取树 + `git apply` + 归一化换行后逐文件比对）。
+> **已验证**：把 20.1 的干净树取出后套上本补丁，`git apply --check` 通过、编译 0 错误并实机运行验证。
 > 注意 Windows 上 `git apply` 受 `core.autocrlf` 影响会把结果写成 CRLF，这是正常现象；想保持 LF 就加 `git -c core.autocrlf=false apply`。
 
 ## 安装
@@ -58,7 +55,7 @@ apply.ps1 -Target C:\path\to\fork -Revert      # 卸载
 **Windows**
 
 ```powershell
-git clone https://github.com/TaterClient/TClient myclient
+git clone --branch 20.1 https://github.com/ddnet/ddnet myclient
 cd myclient
 git submodule update --init --recursive
 powershell -ExecutionPolicy Bypass -File ..\ddnet-background-module\apply.ps1 -Target .
@@ -67,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File ..\ddnet-background-module\apply.ps1 -T
 **Linux / macOS**
 
 ```sh
-git clone https://github.com/TaterClient/TClient myclient
+git clone --branch 20.1 https://github.com/ddnet/ddnet myclient
 cd myclient && git submodule update --init --recursive
 ../ddnet-background-module/apply.sh .
 ```
@@ -77,7 +74,7 @@ cd myclient && git submodule update --init --recursive
 ## 卸载
 
 ```sh
-git apply -R patch/ddnet-background.patch        # 或
+git apply -R patch/ddnet-20.1.patch              # 或
 git checkout -- . && git clean -fd src           # 彻底回到基线
 ```
 
@@ -91,16 +88,15 @@ git checkout -- . && git clean -fd src           # 彻底回到基线
 ```
 ddnet-background-module/
 ├─ patch/
-│   ├─ ddnet-background.patch     TClient 基线的完整改动（25 个文件）
-│   └─ ddnet-19.9.patch           DDNet 官方 19.9 基线的完整改动（17 个文件）
+│   └─ ddnet-20.1.patch            DDNet 官方 20.1 的完整改动（17 个文件）
 ├─ files/                         5 个新增源文件（手工安装 / 换用其它版本控制时用）
 │   ├─ custom_background.{h,cpp}          背景组件（解码→上传→渲染，含 4 种显示方式）
 │   ├─ wallpaper_engine.{h,cpp}           Wallpaper Engine 壁纸扫描与解析
 │   └─ menus_settings_mycustom.cpp        Background 设置页
 ├─ apply.ps1 / apply.sh           安装器（支持 -CheckOnly / --revert）
 ├─ install.ps1                    一条命令全自动（拉源码→打补丁→装 FFmpeg→编译→组装）
-├─ pack-dmod.ps1                  打包出 dist/background-1.0.dmod
-└─ module.json                    机器可读清单（基线、双补丁映射、配置项、引擎 API）
+├─ pack-dmod.ps1                  打包出 dist/background-1.2.dmod
+└─ module.json                    机器可读清单（基线、补丁映射、配置项、引擎 API）
 ```
 
 ## 配置项
@@ -137,24 +133,22 @@ ddnet-background-module/
 
 # English
 
-This is a **DDNet-based background module**: it turns the custom background feature (image / video dynamic background) into a **source module** — apply one patch to a clean DDNet / TClient tree and you get the whole feature; skip it and you have the stock client.
-
-> **It is not a runtime plugin and not a DLL.** DDNet/TClient have no plugin ABI, and the feature needs engine-level rendering support (a texture update command, repeat wrapping) plus menu render hooks. A source patch with an installer is therefore the only honest packaging; "drop a DLL into data/ and it works" is not possible here.
+This is a **DDNet-based background module**: it turns the custom background feature (image / video dynamic background) into a **source module** — apply one patch to a clean DDNet official 20.1 tree and you get the whole feature; skip it and you have the stock client.
 
 ## Baselines
 
 | | |
 |---|---|
-| Upstream | **TClient 10.9.0** (`TaterClient/TClient`) and **DDNet 19.9**, each with its own patch |
-| Size | TClient: 25 files, +2912 / −22 lines — DDNet: 17 files, +2495 lines |
+| Upstream | **DDNet official 20.1** (`ddnet/ddnet`) |
+| Size | 17 files, +2572 / −7 lines |
 
 ## Install
 
-Two ways, mirroring the Chinese section: **A** drop `dist/background-1.0.dmod` into the [ddnet-module-installer](https://github.com/agtwer/ddnet-module-installer) `mods\` folder (or drag it into the window) and install from there; **B** `git clone` this page and run `install.ps1`.
+Two ways, mirroring the Chinese section: **A** drop `dist/background-1.2.dmod` into the [ddnet-module-installer](https://github.com/agtwer/ddnet-module-installer) `mods\` folder (or drag it into the window) and install from there; **B** `git clone` this page and run `install.ps1`.
 
 ```powershell
 # Windows
-git clone https://github.com/TaterClient/TClient myclient
+git clone --branch 20.1 https://github.com/ddnet/ddnet myclient
 cd myclient
 git submodule update --init --recursive
 powershell -ExecutionPolicy Bypass -File ..\ddnet-background-module\apply.ps1 -Target .
@@ -162,7 +156,7 @@ powershell -ExecutionPolicy Bypass -File ..\ddnet-background-module\apply.ps1 -T
 
 ```sh
 # Linux / macOS
-git clone https://github.com/TaterClient/TClient myclient
+git clone --branch 20.1 https://github.com/ddnet/ddnet myclient
 cd myclient && git submodule update --init --recursive
 ../ddnet-background-module/apply.sh .
 ```
@@ -172,7 +166,7 @@ Dry run: `apply.ps1 -CheckOnly` or `apply.sh . --check`.
 ## Uninstall
 
 ```sh
-git apply -R patch/ddnet-background.patch
+git apply -R patch/ddnet-20.1.patch
 # or completely: git checkout -- . && git clean -fd src
 ```
 
@@ -183,7 +177,7 @@ The FFmpeg shipped inside the `ddnet-libs` submodule is a **recorder-only build 
 ## Contents
 
 ```
-patch/ddnet-background.patch   full change set (25 files, apply with git apply)
+patch/ddnet-20.1.patch         full change set (17 files, apply with git apply)
 files/                         the 5 added source files (manual installation / other VCS)
 apply.ps1 / apply.sh           installers (-CheckOnly / --revert supported)
 module.json                    machine-readable manifest

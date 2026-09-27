@@ -5,7 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -MirrorOff             # direct GitHub (no mirror)
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -Proxy 127.0.0.1:7890  # local HTTP proxy
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -WorkDir D:\games\myclient
-#   powershell -ExecutionPolicy Bypass -File install.ps1 -Source C:\src\TClient      # patch an existing tree
+#   powershell -ExecutionPolicy Bypass -File install.ps1 -Source C:\src\ddnet-20.1   # patch an existing tree
 #   powershell -ExecutionPolicy Bypass -File install.ps1 -SkipBuild                  # stop after patching
 #
 # Steps: clone at the pinned base commit -> submodules -> apply patch -> FFmpeg 8.1
@@ -16,8 +16,8 @@
 param(
     [string]$WorkDir = (Join-Path (Get-Location) 'myclient'),
     [string]$Source = '',
-    [string]$Repo = 'https://github.com/TaterClient/TClient.git',
-    [string]$BaseCommit = '6b4118bf0',
+    [string]$Repo = 'https://github.com/ddnet/ddnet.git',
+    [string]$BaseCommit = '20.1',
     [string]$Mirror = 'ghproxy.net',
     [switch]$MirrorOff,
     [string]$Proxy = '',
@@ -178,7 +178,7 @@ if (Test-Path (Join-Path $tree 'thirdparty-dll')) { Copy-Item (Join-Path $tree '
 Copy-Item (Join-Path $tree 'data') $dist -Recurse -Force
 Copy-Item (Join-Path $tree 'storage.cfg') $dist -Force
 @"
-DDNet + custom background module (based on TClient 10.9.0)
+DDNet 20.1 + custom background module
 
 Run:  double-click DDNet.exe
 Use:  put images/videos into  %APPDATA%\DDNet\Background
