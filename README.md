@@ -53,7 +53,7 @@ apply.ps1 -Target C:\path\to\fork -Revert      # 卸载
 > **已验证**：把基线提交的干净树取出后套上本补丁，25/25 个文件与开发树内容完全一致（`git archive` 取树 + `git apply` + 归一化换行后逐文件比对）。
 > 注意 Windows 上 `git apply` 受 `core.autocrlf` 影响会把结果写成 CRLF，这是正常现象；想保持 LF 就加 `git -c core.autocrlf=false apply`。
 
-## 安装（不用安装器时）
+## 安装
 
 **Windows**
 
@@ -150,7 +150,7 @@ This is a **DDNet-based background module**: it turns the custom background feat
 
 ## Install
 
-Two ways, mirroring the Chinese section: **A** drop `dist/background-1.0.dmod` into the [ddnet-module-installer](https://github.com/agtwer/ddnet-module-installer) `mods\` folder (or drag it into the window) and install from there; **B** `git clone` this page and run `install.ps1`. The manual route:
+Two ways, mirroring the Chinese section: **A** drop `dist/background-1.0.dmod` into the [ddnet-module-installer](https://github.com/agtwer/ddnet-module-installer) `mods\` folder (or drag it into the window) and install from there; **B** `git clone` this page and run `install.ps1`.
 
 ```powershell
 # Windows
