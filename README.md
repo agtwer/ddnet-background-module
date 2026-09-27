@@ -9,12 +9,12 @@
 | 方式 | 做法 | 获取来源 |
 |---|---|---|
 | **A. 程序一键部署** | 用安装器选模块后一键完成：拉源码 → 打补丁 → 装 FFmpeg 8.1 → 编译 → 组装出可直接双击的客户端目录 | **ddnet-module-installer**：<https://github.com/agtwer/ddnet-module-installer>（把 `dist/background-1.0.dmod` 放进安装器的 `mods\`，或直接拖进窗口） |
-| **B. 一条命令全自动** | `powershell -ExecutionPolicy Bypass -File install.ps1`（自动完成：拉源码@基线提交 → 子模块 → 打补丁 → 装 FFmpeg 8.1 → cmake 构建 → 组装 `dist\` 可直接双击的目录）。**镜像默认就开**（`ghproxy.net`），可换 `-Mirror hk.gh-proxy.org`、关掉用 `-MirrorOff`；本机有代理就加 `-Proxy 127.0.0.1:7890`（代理同时作用于 git 与 FFmpeg 下载，也会带给子模块那 580MB） | git clone 本页：`git clone https://github.com/agtwer/ddnet-background-module` |
+| **B. 一条命令全自动** | `powershell -ExecutionPolicy Bypass -File install.ps1`（自动完成：拉源码@基线提交 → 子模块 → 打补丁 → 装 FFmpeg 8.1 → cmake 构建 → 组装 `dist\` 可直接双击的目录）。**镜像默认就开**，可换一个用 `-Mirror <host>`、关掉用 `-MirrorOff`；本机有代理就加 `-Proxy 127.0.0.1:7890`（代理同时作用于 git 与 FFmpeg 下载，也会带给子模块那 580MB） | git clone 本页：`git clone https://github.com/agtwer/ddnet-background-module` |
 
 ```powershell
 # B 的常用变体
 install.ps1 -WorkDir D:\src\myclient                        # 指定目录（镜像默认开）
-install.ps1 -Mirror hk.gh-proxy.org                         # 换一个镜像
+install.ps1 -Mirror <host>                                  # 换一个镜像域名
 install.ps1 -MirrorOff                                      # 直连 GitHub（不用镜像）
 install.ps1 -Proxy 127.0.0.1:7890                           # 走本机 HTTP 代理
 install.ps1 -Source C:\src\TClient                          # 直接给已有源码树打补丁（不克隆）
